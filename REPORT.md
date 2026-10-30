@@ -1,0 +1,140 @@
+# certkkt study: report (quick profile)
+
+Date: 2026-10-30. Profile: `quick` (DESIGN section 5.4). The full profile has not been
+run yet; its launcher and time estimate are in AGENTS.md. Every number below comes from
+[docs/results/quick-units.jsonl](docs/results/quick-units.jsonl) (one record per unit) via
+`certkkt study report`; the generated tables are in
+[docs/results/quick.md](docs/results/quick.md).
+
+## 1. What ran
+
+- **Units:** 244 = Maros-Meszaros problems whose QPS file is at most 100 kB (40 of 138)
+  x {Clarabel, OSQP, SCS, HiGHS} at defaults; CBLIB nql30, qssp30, sched_50_50_orig,
+  sched_50_50_scaled x {Clarabel, SCS, ECOS} at defaults; 6 portfolio SOCPs (10
+  industries, windows ending 2005-12, 2015-12, 2025-12, leverage 1.3 and 2) x {Clarabel,
+  SCS, ECOS} x {default, 1e-4, 1e-6, 1e-8}.
+- **Versions:** Python 3.12.13, gmpy2 2.3.2, numpy 2.5.4, scipy 1.18.1; Clarabel 0.11.1,
+  SCS 3.3.1, OSQP 1.1.3, ECOS 2.0.14, HiGHS 1.15.1
+  ([docs/results/quick-manifest.json](docs/results/quick-manifest.json)).
+- **Limits:** solver 60 s, repairs 30 s per unit (all methods together), hard kill 300 s.
+- **Machine and time:** Windows 11, 16 logical CPUs, 4 workers; 7 min wall in two calls.
+- **Outcomes:** 243 units produced a solution and were certified; 1 had no solution
+  (HiGHS "Solve error" on QSHARE1B). No timeouts or crashes.
+- **Data:** problem files read as exact decimals; archives checked against recorded
+  SHA-256 (`src/certkkt/datasets.py`).
+
+## 2. Headline
+
+Exact certification of default solver output, Maros-Meszaros subset (n = 40 problems per
+solver; 95% Wilson intervals):
+
+| solver | claims optimal | as-is certified at 1e-6 | as-is at 1e-8 | exact optimum after repair |
+|---|---|---|---|---|
+| Clarabel | 40/40 | 37/40 = 92% [80, 97] | 30/40 = 75% [60, 86] | 23/40 = 58% [42, 71] |
+| HiGHS | 39/40 | 23/40 = 58% [42, 71] | 5/40 = 12% [5, 26] | 29/40 = 72% [57, 84] |
+| SCS | 40/40 | 16/40 = 40% [26, 55] | 7/40 = 18% [9, 32] | 22/40 = 55% [40, 69] |
+| OSQP | 33/40 | 3/40 = 8% [3, 20] | 0/40 = 0% [0, 9] | 19/40 = 48% [33, 63] |
+
+"Certified at eps" means every exact relative residual (primal, dual, gap; DESIGN 3.2)
+is at most eps. "Exact optimum" means the repairs found an exactly feasible primal-dual
+pair with gap exactly zero (an exact rational optimum).
+
+1. **Status "optimal" says little at tight thresholds.** Among units whose solver
+   reported optimal, the exact residuals exceed 1e-6 for 3/40 Clarabel, 16/39 HiGHS,
+   24/40 SCS and 30/33 OSQP units. OSQP's and SCS's default tolerances (1e-3 and 1e-4)
+   explain most of it. Over all default units failing 1e-6, the binding measure is the
+   dual residual (45) or the gap (32) far more often than primal feasibility (11, mostly
+   SCS).
+2. **Exact optima are recoverable for about half of these small QPs, from any solver.**
+   All 93 exact optima came from the active-set repair (exact KKT solve on the active set
+   read off the floats), including from poor floats (OSQP: 0/40 certified at 1e-8 as is,
+   19/40 exact optima). The exact optimum depends only on the problem, so the spread
+   between solvers measures how well each solver's output identifies the active set:
+   HiGHS (an active-set QP solver) is best.
+3. **Float64 evaluation of the residuals was never wrong at 1e-8.** On all 190 default
+   units, float64 and exact evaluation agreed about `max_rel <= 1e-8`. The value of exact
+   arithmetic here lies in the certificates (exact feasibility, exact bounds, exact
+   optima), not in re-evaluating residuals.
+4. **Portfolio SOCPs: exact two-sided bounds from every Clarabel and ECOS solve.** The
+   interior repair turned all 6 default Clarabel and all 6 default ECOS solutions into
+   `bounded` certificates (exactly feasible primal and dual) with exact relative gap at
+   most 1e-6 (6/6 = 100% [61, 100] each; at most 1e-8: 3/6 and 5/6). SCS: 1/6 at 1e-6.
+   The optima are irrational, so `optimal` is not expected.
+5. **CBLIB SOCPs: no exact certificate within the quick budget.** 0/12 units reached
+   `bounded`; the interior repair exhausted its 30 s budget on all four instances (20-30
+   thousand nonzeros). Section 4 describes the second obstacle, found on nql30.
+
+## 3. Requested tolerance versus certified accuracy (portfolio family)
+
+Median [quartiles] of log10 of the exact as-is `max_rel`, n = 6 per cell; in brackets
+after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
+
+| solver | default | tol 1e-4 | tol 1e-6 | tol 1e-8 |
+|---|---|---|---|---|
+| Clarabel | -7.6 [-7.9, -7.4] | -3.6 [-3.8, -3.4] (0/6) | -6.1 [-6.2, -5.7] (4/6) | -7.6 [-7.9, -7.4] (1/6) |
+| ECOS | -7.5 [-7.6, -7.3] | -3.6 [-3.9, -3.4] (2/6) | -5.4 [-5.7, -5.3] (1/6) | -7.5 [-7.6, -7.3] (0/6) |
+| SCS | -6.1 [-6.6, -4.7] | -6.1 [-6.6, -4.7] (6/6) | -7.1 [-9.7, -6.6] (5/6) | -9.2 [-10.1, -8.6] (5/6) |
+
+- The default columns equal the solvers' documented defaults: Clarabel and ECOS default
+  to 1e-8, SCS to 1e-4 (the records are identical), which checks the tolerance mapping.
+- The interior-point solvers land within about half an order of magnitude of the
+  request, mostly above it, so a request of 1e-8 is met in certkkt's measure for 1/6
+  (Clarabel) and 0/6 (ECOS) units. SCS lands one to two orders below its request, so its
+  requested tolerance is conservative in this measure.
+- The exact relative gap is two to three orders smaller than `max_rel` throughout; the
+  dual residual is the binding measure.
+
+## 4. Repair diagnostics
+
+- **QPs:** of the 109 mm units with an `optimal` or `bounded` best certificate, 93 came
+  from `active_set`, 7 from `snapped`, 6 from `interior` and 3 from `fixed`. Repairs used
+  982 of the 990 CPU seconds spent on mm units.
+- **SOCPs, why the interior push needed two changes** (both regression-tested): a cone
+  whose head is a constant (the turnover budget `||w - w0|| <= tau`) or pinned by
+  stationarity (the epigraph variable `t` in `||R w|| <= t`) cannot gain room by raising
+  its head, so the push also shrinks tails and repeats; before that change no portfolio
+  solution reached `bounded`.
+- **nql30 (CBLIB):** given more time, the interior push succeeds in floating point (room
+  2.6e-7 after the push), but the exact equality restoration moves x by O(10^4): the
+  float least-norm step stalls at an equality residual of about 1.5e-14, and the exact
+  basic correction of that remainder is badly conditioned. The instance contains
+  coefficients 0.5000000000015 next to 0.5, which plausibly makes nearly dependent
+  equality rows exactly independent. A rank-revealing basis choice is the planned fix
+  (AGENTS.md, next steps).
+
+## 5. Mittelmann's SOCP benchmark and "Clarabel 14/18"
+
+- The claim could not be traced to the benchmark. Mittelmann's "Large Second Order Cone
+  Benchmark" (https://plato.asu.edu/ftp/socp.html) lists MOSEK, ECOS, KNITRO, COPT,
+  Gurobi, OPTVERSE, cuOpt or COPT-PDHCG in every version checked: the live page dated
+  26 Oct 2026 and Internet Archive snapshots of pages dated 12 Nov 2022, 11 Sep 2024,
+  31 Oct 2024, 5 Apr 2025, 29 Oct 2025, 9 Jan 2026 and 10 Aug 2026. None lists Clarabel,
+  and the log directory (plato.asu.edu/ftp/socp_logs/) has no Clarabel folder. If the
+  figure exists, it comes from a separate run on the same instances.
+- Only 7 of the 18 instances are on CBLIB's public download list (beam7, beam30,
+  chainsing-50000-1/2/3, db-joint-soerensen, db-plate-yield-line); fir*, dsNRL and wbNRL
+  are not. A reproduction can cover at most 7/18. The full profile runs Clarabel, SCS
+  and ECOS at defaults on the 5 that fit in memory as exact rationals (beam7 and beam30,
+  55 and 229 MB compressed, are recorded as skipped) with a 3600 s solver limit; it has
+  not been run yet.
+- Single pilot measurement (not part of the tables): Clarabel 0.11.1 at defaults on
+  chainsing-50000-3 (350k variables, 950k nonzeros) returned status AlmostSolved
+  ("inaccurate") after 17 s; certkkt loaded the instance in 11 s and certified the floats
+  in 8 s, exact as-is `max_rel` 2.8e-9 (level `residuals`). Under a "solved" count that
+  excludes almost-solved statuses, this instance would count against Clarabel.
+
+## 6. Limitations
+
+- Quick profile only: small Maros-Meszaros problems (40 of 138, the easy end), 4 of 18
+  CBLIB instances, 6 of 54 portfolio instances. Shares will move on the full sets. The
+  intervals describe this instance set, not a population of problems, and instances
+  within a family are related.
+- Repair success rates are bounded by the time budget (30 s) and by pure-Python exact
+  elimination; a failed repair is not evidence that no exact certificate exists.
+- certkkt's relative measures are not the solvers' stopping criteria; "meets the
+  requested tolerance" is in certkkt's measure.
+- Problems are certified as published (exact decimals); the solvers saw the nearest
+  doubles.
+- Infeasibility and unboundedness claims are not certified. One OSQP unit reported
+  PRIMALC5 dual infeasible although it is a feasible, bounded problem; the point OSQP
+  returned has exact `max_rel` 5e12.

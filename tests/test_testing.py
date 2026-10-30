@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
@@ -45,3 +49,13 @@ def test_fixture_uses_command_line_eps(certkkt):
     certkkt.assert_certified(lp(), [0.5, 0.5 - 1e-8], [1, 0, 0])
     with pytest.raises(AssertionError):
         certkkt.assert_certified(lp(), [0.5, 0.5 - 1e-5], [1, 0, 0])
+
+
+def test_plugin_does_not_import_certkkt_into_other_sessions(tmp_path):
+    # pytest loads the plugin in every session of the environment: an unrelated suite
+    # must neither pay for importing certkkt nor fail on its CERTKKT_RATIONAL check.
+    (tmp_path / "test_other.py").write_text("def test_other():\n    pass\n")
+    env = {**os.environ, "CERTKKT_RATIONAL": "bogus"}
+    cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(tmp_path)]
+    res = subprocess.run(cmd, cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert res.returncode == 0, res.stdout + res.stderr

@@ -61,7 +61,7 @@ Changelog = "https://github.com/h-a-forster/certkkt/blob/main/CHANGELOG.md"
 certkkt = "certkkt.cli:main"
 
 [project.entry-points.pytest11]
-certkkt = "certkkt.pytest_plugin"
+certkkt = "pytest_certkkt"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
@@ -71,11 +71,12 @@ dev = ["pytest>=8", "ruff>=0.6"]
 exclude-newer = "2026-10-23T00:00:00Z"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/certkkt"]
+only-include = ["src/certkkt", "src/pytest_certkkt.py"]
+sources = ["src"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "src/certkkt", "tests", "docs", "scripts", "README.md", "LICENSE",
+    "src/certkkt", "src/pytest_certkkt.py", "tests", "docs", "scripts", "README.md", "LICENSE",
     "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "CITATION.cff", "REPORT.md",
 ]
 

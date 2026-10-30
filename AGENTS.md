@@ -37,7 +37,7 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 | `src/certkkt/certify.py` | exact certificate and levels |
 | `src/certkkt/repair.py` | repair methods (DESIGN 4) |
 | `src/certkkt/solvers/` | adapters and the adapter contract |
-| `src/certkkt/testing.py`, `pytest_plugin.py` | assertion helpers, `certkkt` fixture |
+| `src/certkkt/testing.py`, `src/pytest_certkkt.py` | assertion helpers; `certkkt` fixture (top-level so pytest loads it without importing certkkt) |
 | `src/certkkt/datasets.py`, `portfolio.py` | data sources and checksums; portfolio family |
 | `src/certkkt/study.py`, `report.py`, `stats.py` | runner, report, Wilson intervals |
 | `src/certkkt/cli.py` | CLI |

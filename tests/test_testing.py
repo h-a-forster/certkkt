@@ -27,8 +27,17 @@ def test_assert_level_repairs_first():
     p = lp()
     x, z = np.array([0.5 + 1e-12, 0.5 - 1e-12]), np.array([1.0, 1e-15, 0.0])
     assert assert_level(p, x, z, "optimal").level == "optimal"
-    with pytest.raises(AssertionError, match="weaker than"):
+    with pytest.raises(AssertionError, match="does not meet"):
         assert_level(p, x, z, "optimal", repair_first=False)
+
+
+def test_one_sided_levels_are_incomparable():
+    p = lp()
+    # Exactly feasible primal, infeasible dual: an upper bound only.
+    x, z = [Q(1), Q(0)], [Q(-1), Q(0), Q(0)]
+    assert assert_level(p, x, z, "primal_feasible", repair_first=False).level == "primal_feasible"
+    with pytest.raises(AssertionError, match="does not meet"):
+        assert_level(p, x, z, "dual_feasible", repair_first=False)
 
 
 def test_fixture_uses_command_line_eps(certkkt):

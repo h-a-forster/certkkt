@@ -30,7 +30,7 @@ def _cert_lines(cert: Any) -> list[str]:
 
 
 def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Namespace) -> int:
-    from certkkt.certify import LEVELS, certify
+    from certkkt.certify import certify, meets_level
     from certkkt.repair import repair
 
     cert = certify(inst.problem, x, z)
@@ -54,10 +54,10 @@ def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Names
     if args.require_eps is not None and not final.certified_at(args.require_eps):
         print(f"FAIL: not certified at eps={args.require_eps}", file=sys.stderr)
         failed = True
-    if args.require_level is not None and LEVELS.index(final.level) > LEVELS.index(
-        args.require_level
+    if args.require_level is not None and not any(
+        meets_level(c.level, args.require_level) for c in (cert, best) if c is not None
     ):
-        print(f"FAIL: level {final.level} is weaker than {args.require_level}", file=sys.stderr)
+        print(f"FAIL: level {final.level} does not meet {args.require_level}", file=sys.stderr)
         failed = True
     return 1 if failed else 0
 

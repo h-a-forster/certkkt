@@ -45,6 +45,24 @@ from certkkt.rational import ONE, ZERO, Q, dot, max_abs, q_float_up, sqrt_up, to
 from certkkt.sparse import DEFAULT_BUDGET, psd_check
 
 LEVELS = ("optimal", "bounded", "primal_feasible", "dual_feasible", "residuals")
+#: Levels each level implies. The order is partial: primal_feasible and dual_feasible are
+#: incomparable, so neither satisfies a requirement for the other.
+_IMPLIES = {
+    "optimal": frozenset(LEVELS),
+    "bounded": frozenset(("bounded", "primal_feasible", "dual_feasible", "residuals")),
+    "primal_feasible": frozenset(("primal_feasible", "residuals")),
+    "dual_feasible": frozenset(("dual_feasible", "residuals")),
+    "residuals": frozenset(("residuals",)),
+}
+
+
+def meets_level(level: str, required: str) -> bool:
+    """True if a certificate at ``level`` is at least as strong as ``required``."""
+    if required not in _IMPLIES:
+        raise ValueError(f"unknown level {required!r}; choose from {LEVELS}")
+    return required in _IMPLIES[level]
+
+
 #: Thresholds at which certificates are classified by default (exact decimals).
 DEFAULT_EPS = ("1e-4", "1e-6", "1e-8", "1e-10")
 
@@ -354,6 +372,7 @@ def float_residuals(problem: ConicProblem, x: np.ndarray, z: np.ndarray | None) 
 __all__ = [
     "DEFAULT_EPS",
     "LEVELS",
+    "meets_level",
     "Certificate",
     "certify",
     "cone_violation",

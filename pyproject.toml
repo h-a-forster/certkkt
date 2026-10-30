@@ -1,0 +1,96 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "certkkt"
+version = "0.1.0"
+description = "Exact rational-arithmetic optimality certificates for LP, QP and SOCP solutions: certify or refute feasibility, cone membership and the duality gap of a solver's output, and repair near-optimal floats into exact certificates."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "certkkt contributors" }]
+keywords = [
+    "optimization", "linear-programming", "quadratic-programming", "second-order-cone",
+    "conic-optimization", "verification", "certificate", "exact-arithmetic", "kkt",
+    "clarabel", "scs", "osqp", "ecos", "highs",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+# Core: problem model, readers, exact certification and repair. gmpy2 provides fast
+# rationals; certkkt falls back to fractions.Fraction when it is unavailable.
+dependencies = ["numpy>=1.26", "scipy>=1.11", "gmpy2>=2.2"]
+
+[project.optional-dependencies]
+# Solvers under test. Exact versions for a study come from uv.lock and are recorded in
+# every unit record.
+clarabel = ["clarabel>=0.10"]
+scs = ["scs>=3.2"]
+osqp = ["osqp>=1.0"]
+# ECOS publishes wheels only up to CPython 3.12 (2.0.14); 3.13 would need a C compiler.
+ecos = ["ecos>=2.0.14; python_version < '3.13'"]
+highs = ["highspy>=1.11"]
+cvxpy = ["cvxpy>=1.6"]
+solvers = ["clarabel>=0.10", "scs>=3.2", "osqp>=1.0", "ecos>=2.0.14; python_version < '3.13'", "highspy>=1.11"]
+all = [
+    "clarabel>=0.10", "scs>=3.2", "osqp>=1.0", "ecos>=2.0.14; python_version < '3.13'", "highspy>=1.11", "cvxpy>=1.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/h-a-forster/certkkt"
+Documentation = "https://github.com/h-a-forster/certkkt/tree/main/docs"
+Issues = "https://github.com/h-a-forster/certkkt/issues"
+Changelog = "https://github.com/h-a-forster/certkkt/blob/main/CHANGELOG.md"
+
+[project.scripts]
+certkkt = "certkkt.cli:main"
+
+[project.entry-points.pytest11]
+certkkt = "certkkt.pytest_plugin"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.uv]
+# Only resolve releases that are at least a week old at lock time.
+exclude-newer = "2026-10-23T00:00:00Z"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/certkkt"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/certkkt", "tests", "docs", "scripts", "README.md", "LICENSE",
+    "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "CITATION.cff", "REPORT.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "slow: tests that take more than a few seconds",
+    "solver: tests that need a solver package installed",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tmp", "data", "runs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]

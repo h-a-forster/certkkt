@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+# Scratch work
+tmp/
+# Study output (small derived results worth keeping go to docs/results/)
+runs/
+# Downloaded instances and caches
+data/
+cache/
+.cache/

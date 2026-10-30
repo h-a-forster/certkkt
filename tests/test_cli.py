@@ -1,8 +1,11 @@
 import json
+import sys
 
 import pytest
 
+from certkkt import Q, certify, make_problem
 from certkkt.cli import main
+from certkkt.repair import RepairOutcome
 
 LP = """\
 NAME LP1
@@ -42,6 +45,22 @@ def test_require_eps_fails_with_exit_code_1(tmp_path, lp_file, capsys):
     sol.write_text(json.dumps({"x": [0.5, 0.49], "z": [1, 0, 0]}))
     assert main(["certify", str(lp_file), str(sol), "--no-repair", "--require-eps", "1e-6"]) == 1
     assert "FAIL" in capsys.readouterr().err
+
+
+def test_require_level_checks_every_repair_certificate(tmp_path, lp_file, monkeypatch):
+    # The order is partial: the best-ranked certificate (small residuals, no exact side) can
+    # miss a level that a lower-ranked one-sided certificate meets.
+    p = make_problem(A=[[-1, -1], [-1, 0], [0, -1]], b=[-1, 0, 0], cones=[("nonneg", 3)], q=[1, 1])
+    near = certify(p, [Q(1, 2), Q(1, 2) - Q(1, 10**9)], [1, -Q(1, 10**12), 0])
+    one_sided = certify(p, [0, 0], [1, 0, 0])
+    assert (near.level, one_sided.level) == ("residuals", "dual_feasible")
+    stub = RepairOutcome([near, one_sided])
+    monkeypatch.setattr(sys.modules["certkkt.repair"], "repair", lambda *a, **k: stub)
+    sol = tmp_path / "sol.json"
+    sol.write_text(json.dumps({"x": [0.5, 0.4], "z": [1, -1e-3, 0]}))
+    args = ["certify", str(lp_file), str(sol), "--require-level"]
+    assert main([*args, "dual_feasible"]) == 0
+    assert main([*args, "primal_feasible"]) == 1
 
 
 def test_bad_solution_file_is_rejected(tmp_path, lp_file):

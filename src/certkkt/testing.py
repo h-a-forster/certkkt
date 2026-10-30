@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from certkkt.certify import LEVELS, Certificate, certify, meets_level
+from certkkt.certify import LEVELS, Certificate, certify, first_meeting
 from certkkt.problem import ConicProblem
 from certkkt.repair import repair
 
@@ -88,9 +88,9 @@ def assert_level(
         certs = repair(problem, np.asarray(x, float), zf).certificates
     else:
         certs = [certify(problem, x, z)]
-    for cert in certs:  # best first; primal_feasible and dual_feasible are incomparable
-        if meets_level(cert.level, level):
-            return cert
+    cert = first_meeting(certs, level)
+    if cert is not None:
+        return cert
     raise AssertionError(f"certificate does not meet {level!r}: {_describe(certs[0])}")
 
 

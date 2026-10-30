@@ -34,7 +34,7 @@ level is downgraded and ``psd`` says why.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -61,6 +61,14 @@ def meets_level(level: str, required: str) -> bool:
     if required not in _IMPLIES:
         raise ValueError(f"unknown level {required!r}; choose from {LEVELS}")
     return required in _IMPLIES[level]
+
+
+def first_meeting(certs: Iterable[Certificate], required: str) -> Certificate | None:
+    """The first certificate in ``certs`` that meets ``required``, or None. Check every
+    candidate, not only the best-ranked one: the order is partial, so a lower-ranked
+    certificate can meet a requirement that the best one does not."""
+    meets_level("optimal", required)  # rejects an unknown level even if certs is empty
+    return next((c for c in certs if meets_level(c.level, required)), None)
 
 
 #: Thresholds at which certificates are classified by default (exact decimals).
@@ -372,6 +380,7 @@ def float_residuals(problem: ConicProblem, x: np.ndarray, z: np.ndarray | None) 
 __all__ = [
     "DEFAULT_EPS",
     "LEVELS",
+    "first_meeting",
     "meets_level",
     "Certificate",
     "certify",

@@ -30,13 +30,15 @@ def _cert_lines(cert: Any) -> list[str]:
 
 
 def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Namespace) -> int:
-    from certkkt.certify import certify, meets_level
+    from certkkt.certify import certify, first_meeting
     from certkkt.repair import repair
 
     cert = certify(inst.problem, x, z)
+    certs = [cert]
     best = None
     if not args.no_repair:
-        best = repair(inst.problem, x, z, time_budget=args.time_budget).best
+        certs = repair(inst.problem, x, z, time_budget=args.time_budget).certificates
+        best = certs[0]
     final = best if best is not None and best.rank() < cert.rank() else cert
     if args.json:
         out = {"problem": inst.problem.summary(), "as_is": cert.to_dict()}
@@ -54,9 +56,7 @@ def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Names
     if args.require_eps is not None and not final.certified_at(args.require_eps):
         print(f"FAIL: not certified at eps={args.require_eps}", file=sys.stderr)
         failed = True
-    if args.require_level is not None and not any(
-        meets_level(c.level, args.require_level) for c in (cert, best) if c is not None
-    ):
+    if args.require_level is not None and first_meeting(certs, args.require_level) is None:
         print(f"FAIL: level {final.level} does not meet {args.require_level}", file=sys.stderr)
         failed = True
     return 1 if failed else 0

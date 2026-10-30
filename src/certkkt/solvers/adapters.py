@@ -35,6 +35,7 @@ def _soc_dims(inst: Instance) -> list[int]:
 class ClarabelAdapter(Adapter):
     name = "clarabel"
     package = "clarabel"
+    default_tol = "1e-8"
     supports_soc = True
     supports_quadratic = True
 
@@ -98,6 +99,7 @@ class ClarabelAdapter(Adapter):
 class SCSAdapter(Adapter):
     name = "scs"
     package = "scs"
+    default_tol = "1e-4"
     supports_soc = True
     supports_quadratic = True
 
@@ -159,6 +161,7 @@ class OSQPAdapter(Adapter):
 
     name = "osqp"
     package = "osqp"
+    default_tol = "1e-3"
     supports_soc = False
     supports_quadratic = True
 
@@ -239,6 +242,7 @@ class OSQPAdapter(Adapter):
 class ECOSAdapter(Adapter):
     name = "ecos"
     package = "ecos"
+    default_tol = "1e-8"
     supports_soc = True
     supports_quadratic = False
 
@@ -301,6 +305,7 @@ class HiGHSAdapter(Adapter):
 
     name = "highs"
     package = "highspy"
+    default_tol = "1e-7"
     supports_soc = False
     supports_quadratic = True
 

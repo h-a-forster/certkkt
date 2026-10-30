@@ -30,7 +30,28 @@ def fmt_share(k: int, n: int) -> str:
     if n == 0:
         return "0/0"
     lo, hi = wilson(k, n)
-    return f"{k}/{n} = {100 * k / n:.0f}% [{100 * lo:.0f}, {100 * hi:.0f}]"
+    pct = (200 * k + n) // (2 * n)  # round half up in integers (float 100*k/n ties vary)
+    return f"{k}/{n} = {pct}% [{100 * lo:.0f}, {100 * hi:.0f}]"
+
+
+def mcnemar_exact(b: int, c: int) -> float:
+    """Two-sided exact McNemar p-value from the discordant counts b and c."""
+    n = b + c
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, i) for i in range(min(b, c) + 1))
+    return min(1.0, 2 * tail / 2**n)
+
+
+def holm(pvalues: list[float]) -> list[float]:
+    """Holm step-down adjusted p-values, in the input order."""
+    m = len(pvalues)
+    out = [0.0] * m
+    running = 0.0
+    for rank, i in enumerate(sorted(range(m), key=lambda i: pvalues[i])):
+        running = max(running, min(1.0, (m - rank) * pvalues[i]))
+        out[i] = running
+    return out
 
 
 def quantile(values: list[float], q: float) -> float:
@@ -44,4 +65,4 @@ def quantile(values: list[float], q: float) -> float:
     return s[lo] + (s[hi] - s[lo]) * (pos - lo)
 
 
-__all__ = ["fmt_share", "quantile", "wilson"]
+__all__ = ["fmt_share", "holm", "mcnemar_exact", "quantile", "wilson"]

@@ -8,8 +8,8 @@ import pytest
 from certkkt import certify, study
 from certkkt.portfolio import FAMILY, min_variance_socp, parse_french_csv
 from certkkt.rational import Q
-from certkkt.report import markdown, summarise
-from certkkt.stats import quantile, wilson
+from certkkt.report import asis_ok, markdown, summarise
+from certkkt.stats import fmt_share, holm, mcnemar_exact, quantile, wilson
 
 
 def french_csv(k=10, start=2001, end=2025, seed=0):
@@ -56,6 +56,25 @@ def test_wilson_interval():
     with pytest.raises(ValueError):
         wilson(3, 2)
     assert quantile([3.0, 1.0, 2.0], 0.5) == 2.0
+
+
+def test_paired_tests_and_share_rounding():
+    assert mcnemar_exact(7, 0) == 2 / 2**7 and mcnemar_exact(0, 0) == 1.0
+    assert mcnemar_exact(4, 4) == 1.0
+    assert holm([0.031, 0.002, 0.5]) == [0.062, 0.006, 0.5]
+    # Ties round half up whatever the float representation of 100 * k / n.
+    assert fmt_share(37, 40).startswith("37/40 = 93%")
+    assert fmt_share(3, 40).startswith("3/40 = 8%")
+
+
+def test_report_compares_exactly_and_counts_comparable_units():
+    # float("1e-8") is above the decimal 1e-8, so it does not meet eps = "1e-8".
+    rec = {"key": "a", "suite": "s", "solver": "x", "instance": "i", "tol": "default"}
+    over = {**rec, "as_is": {"max_rel": float("1e-8")}}
+    assert not asis_ok(over, "1e-8") and asis_ok(over, "1e-6")
+    full = {**over, "float": {"rel_primal": 0.0, "rel_dual": 1e-9, "rel_gap": 0.0}}
+    no_float = {**over, "key": "b", "instance": "j"}
+    assert "disagree at eps = 1e-8 on 1 of 1 default" in markdown([full, no_float])
 
 
 @pytest.fixture

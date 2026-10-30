@@ -89,6 +89,8 @@ class Adapter(ABC):
     package: str = ""  # distribution name, for the version string
     supports_soc: bool = False
     supports_quadratic: bool = False
+    #: The solver's documented default accuracy (exact decimal), in its own measure.
+    default_tol: str = ""
 
     def version(self) -> str:
         try:

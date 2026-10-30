@@ -2,18 +2,28 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections import defaultdict
+from fractions import Fraction
 from typing import Any
 
-from certkkt.stats import fmt_share, quantile, wilson
+from certkkt.stats import fmt_share, holm, mcnemar_exact, quantile, wilson
 
 EPS = ("1e-4", "1e-6", "1e-8")
 EXACT_LEVELS = ("optimal", "bounded")
 
 
-def _f(e: str) -> float:
-    return float(e)
+def _le(v: float, eps: str) -> bool:
+    """v <= eps exactly; v is a rounded-up upper bound and eps an exact decimal string."""
+    return Fraction(v) <= Fraction(eps)
+
+
+def default_tol(solver: str) -> str | None:
+    from certkkt.solvers import ADAPTERS
+
+    a = ADAPTERS.get(solver)
+    return a.default_tol if a is not None and a.default_tol else None
 
 
 def asis_rel(rec: dict[str, Any]) -> float | None:
@@ -24,7 +34,7 @@ def asis_rel(rec: dict[str, Any]) -> float | None:
 
 def asis_ok(rec: dict[str, Any], eps: str) -> bool:
     v = asis_rel(rec)
-    return v is not None and v <= _f(eps)
+    return v is not None and _le(v, eps)
 
 
 def repaired_ok(rec: dict[str, Any], eps: str) -> bool:
@@ -32,7 +42,7 @@ def repaired_ok(rec: dict[str, Any], eps: str) -> bool:
     b = rec.get("best")
     if not b or b.get("level") not in EXACT_LEVELS:
         return False
-    return b.get("max_rel") is not None and b["max_rel"] <= _f(eps)
+    return b.get("max_rel") is not None and _le(b["max_rel"], eps)
 
 
 def exactly_optimal(rec: dict[str, Any]) -> bool:
@@ -40,14 +50,18 @@ def exactly_optimal(rec: dict[str, Any]) -> bool:
     return bool(b) and b.get("level") == "optimal"
 
 
+def float_max_rel(rec: dict[str, Any]) -> float | None:
+    """Largest float64-evaluated relative residual, or None unless as-is and all three
+    float residuals are available (the records on which the two can be compared)."""
+    fl = rec.get("float") or {}
+    vals = [fl.get(k) for k in ("rel_primal", "rel_dual", "rel_gap")]
+    return None if asis_rel(rec) is None or None in vals else max(vals)
+
+
 def float_disagrees(rec: dict[str, Any], eps: str) -> bool:
     """Float64 evaluation of the residuals and exact evaluation disagree at eps."""
-    fl = rec.get("float")
-    a = asis_rel(rec)
-    if not fl or a is None or fl.get("rel_dual") is None:
-        return False
-    fv = max(fl["rel_primal"], fl["rel_dual"], fl["rel_gap"])
-    return (fv <= _f(eps)) != (a <= _f(eps))
+    fv = float_max_rel(rec)
+    return fv is not None and (fv <= float(eps)) != _le(asis_rel(rec), eps)
 
 
 def _group(records: list[dict[str, Any]], *keys: str) -> dict[tuple, list[dict[str, Any]]]:
@@ -90,6 +104,17 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
         outcomes[r.get("outcome", "?")] += 1
     lines.append("Outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items())))
     lines.append("")
+    spent = defaultdict(int)
+    for r in records:
+        if any("time budget exhausted" in v for v in (r.get("repair_notes") or {}).values()):
+            spent[r.get("suite")] += 1
+    if spent:
+        lines.append(
+            "Repair time budget exhausted: "
+            + ", ".join(f"{k} {v}" for k, v in sorted(spent.items()))
+            + " units."
+        )
+        lines.append("")
 
     default = [r for r in records if r.get("tol") == "default"]
     if default:
@@ -100,9 +125,12 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
             "(primal, dual, gap) at most eps. Repaired: an exactly feasible primal-dual",
             "pair (level optimal or bounded) with exact relative gap at most eps.",
             "",
+            "As-is at own tol: the same test at the solver's documented default tolerance",
+            "(in certkkt's measure, which is not the solver's stopping criterion).",
+            "",
             "| suite | solver | n | claims optimal | as-is 1e-4 | as-is 1e-6 | as-is 1e-8 "
-            "| repaired 1e-6 | repaired 1e-8 | exact optimum |",
-            "|---|---|---|---|---|---|---|---|---|---|",
+            "| as-is at own tol | repaired 1e-6 | repaired 1e-8 | exact optimum |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for (suite, solver), recs in _group(default, "suite", "solver").items():
             n = len(recs)
@@ -112,19 +140,34 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
                 str(n),
                 fmt_share(sum(_status(r) == "optimal" for r in recs), n),
                 *(fmt_share(sum(asis_ok(r, e) for r in recs), n) for e in EPS),
+                f"{fmt_share(sum(asis_ok(r, t) for r in recs), n)} at {t}"
+                if (t := default_tol(solver))
+                else "-",
                 *(fmt_share(sum(repaired_ok(r, e) for r in recs), n) for e in ("1e-6", "1e-8")),
                 fmt_share(sum(exactly_optimal(r) for r in recs), n),
             ]
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
-        dis = [r for r in default if float_disagrees(r, "1e-8")]
+        lines += _paired(default)
+        comparable = [r for r in default if float_max_rel(r) is not None]
+        dis = [r for r in comparable if float_disagrees(r, "1e-8")]
         lines.append(
             f"Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-8 on "
-            f"{len(dis)} of {len(default)} default units"
+            f"{len(dis)} of {len(comparable)} default units with both"
             + (": " + ", ".join(r["key"] for r in dis[:10]) if dis else "")
             + ("" if len(dis) <= 10 else ", ...")
             + "."
         )
+        if comparable:
+            ratio = max(
+                abs(math.log10(max(float_max_rel(r), 1e-300) / max(asis_rel(r), 1e-300)))
+                for r in comparable
+            )
+            near = sum(5e-9 <= asis_rel(r) <= 2e-8 for r in comparable)
+            lines.append(
+                f"Largest |log10(float64 / exact)| of max_rel: {ratio:.2f}; {near} units have "
+                "an exact max_rel within a factor of 2 of 1e-8."
+            )
         lines.append("")
 
     swept = [r for r in records if r.get("tol") != "default"]
@@ -183,6 +226,43 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
             )
         lines.append("")
     return "\n".join(lines)
+
+
+def _paired(default: list[dict[str, Any]]) -> list[str]:
+    """Exact optima paired by instance: per solver pair, the problems only one of them
+    reached, with an exact McNemar test and Holm adjustment within the suite."""
+    lines: list[str] = []
+    for (suite,), recs in _group(default, "suite").items():
+        got: dict[str, dict[str, bool]] = defaultdict(dict)
+        for r in recs:
+            got[r["solver"]][r["instance"]] = exactly_optimal(r)
+        solvers = sorted(got)
+        common = sorted(set.intersection(*(set(v) for v in got.values())))
+        union = sum(any(got[s][i] for s in solvers) for i in common)
+        if len(solvers) < 2 or union == 0:
+            continue
+        inter = sum(all(got[s][i] for s in solvers) for i in common)
+        rows = []
+        for a, b in itertools.combinations(solvers, 2):
+            oa = sum(got[a][i] and not got[b][i] for i in common)
+            ob = sum(got[b][i] and not got[a][i] for i in common)
+            rows.append((a, b, oa, ob, mcnemar_exact(oa, ob)))
+        adj = holm([row[4] for row in rows])
+        lines += [
+            f"Exact optimum paired by instance ({suite}, {len(common)} problems): "
+            f"{union} reached from at least one solver, {inter} from all "
+            f"{len(solvers)}. Exact McNemar test, Holm-adjusted over the "
+            f"{len(rows)} pairs.",
+            "",
+            "| a | b | only a | only b | p | Holm p |",
+            "|---|---|---|---|---|---|",
+            *(
+                f"| {a} | {b} | {oa} | {ob} | {p:.3f} | {h:.3f} |"
+                for (a, b, oa, ob, p), h in zip(rows, adj, strict=True)
+            ),
+            "",
+        ]
+    return lines
 
 
 def _q3(vals: list[float]) -> str:

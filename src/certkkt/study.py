@@ -449,7 +449,8 @@ def run_study(
     sink = _Sink(run_dir, len(units), len(units) - len(remaining), echo)
     # One manifest entry per call: versions can differ between resumed calls.
     manifest = run_dir / "manifest.json"
-    calls = json.loads(manifest.read_text())["calls"] if manifest.exists() else []
+    prior = json.loads(manifest.read_text()) if manifest.exists() else {"calls": []}
+    calls = prior.get("calls", [prior])  # an older run directory holds one flat call
     calls.append(
         {
             "profile": profile_name,

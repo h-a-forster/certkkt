@@ -197,10 +197,15 @@ def test_manifest_records_input_file_hashes(tmp_path, data_root):
     from certkkt.datasets import sha256_file
 
     run = tmp_path / "run"
+    run.mkdir()
+    # A run directory from before per-call manifests holds one flat call; resuming keeps it.
+    old = {"profile": "quick", "suites": ["portfolio"], "started": "2026-10-29T00:00:00"}
+    (run / "manifest.json").write_text(json.dumps(old))
     study.run_study(
         "quick", ("portfolio",), run_dir=run, data_root=data_root, max_units=0, echo=print
     )
-    (call,) = json.loads((run / "manifest.json").read_text())["calls"]
+    first, call = json.loads((run / "manifest.json").read_text())["calls"]
+    assert first == old
     rel = "raw/french/10_Industry_Portfolios_CSV.zip"
     zf = data_root / rel
     assert call["inputs"] == {rel: {"sha256": sha256_file(zf), "bytes": zf.stat().st_size}}

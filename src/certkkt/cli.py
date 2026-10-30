@@ -254,7 +254,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument(
         "--accept-new-data",
         action="store_true",
-        help="record a changed unpinned file (French returns) instead of refusing it",
+        help="record a changed file that has no pinned checksum (French returns, beam7, beam30) "
+        "instead of refusing it",
     )
     sp.set_defaults(func=cmd_fetch)
 

@@ -53,7 +53,8 @@ passes `y` unclipped, so a wrong-signed multiplier shows up as a dual cone viola
 
 ### 2.3 Readers
 
-- **MPS/QPS** (`qps.py`): free format; numbers are exact decimals (`"0.1"` is 1/10).
+- **MPS/QPS** (`qps.py`): free format, falling back to fixed format (names with spaces,
+  e.g. QFORPLAN) when free-format parsing fails; numbers are exact decimals (`"0.1"` is 1/10).
   NAME, OBJSENSE, ROWS, COLUMNS, RHS, RANGES, BOUNDS, QUADOBJ/QSECTION (one triangle),
   QMATRIX (full), ENDATA. Conventions as in HiGHS and CPLEX: first N row is the
   objective; an RHS on it is the negated constant; RANGES on E rows widen by sign; a
@@ -86,9 +87,11 @@ only the convention, never the values:
 boxed QP, the same QP in conic form and an SOCP. Tolerance requests (section 5.4) map to
 Clarabel `tol_gap_abs = tol_gap_rel = tol_feas`; SCS and OSQP `eps_abs = eps_rel`; ECOS
 `feastol = abstol = reltol`; HiGHS `primal_ = dual_feasibility_tolerance = kkt_tolerance =
-ipm_optimality_tolerance` (`kkt_tolerance` sets every feasibility and optimality measure,
-including the gap). Unknown settings
-are errors, not ignored.
+ipm_optimality_tolerance`. The two optimality options are set for like-for-like requests, but
+no effect of them is measured: on the 40 smallest Maros-Meszaros QPs, 79 of 80 solutions at
+1e-4 and 1e-8 were bit-identical with and without them (HiGHS's QP solver need not read
+them). The feasibility tolerances do matter there: 6 of the 40 solutions differ across the
+default, 1e-4 and 1e-8. Unknown settings are errors, not ignored.
 
 ## 3. Certification (`certify.py`)
 

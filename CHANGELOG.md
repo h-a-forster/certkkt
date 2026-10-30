@@ -17,7 +17,9 @@ follow semantic versioning.
 - `Certificate.to_dict` raised OverflowError for objectives beyond the float range.
 - The QPS reader falls back to fixed-format MPS, so QFORPLAN (names with spaces) loads:
   all 138 Maros-Meszaros files now do.
-- HiGHS tolerance requests also set `kkt_tolerance` and `ipm_optimality_tolerance`.
+- HiGHS tolerance requests also set `kkt_tolerance` and `ipm_optimality_tolerance`. No
+  effect is measured on the Maros-Meszaros QPs (79 of 80 solutions on the 40 smallest
+  bit-identical at 1e-4 and 1e-8); the feasibility tolerances do change 6 of those 40.
 - `study run` refuses to start when a needed solver is missing (its units became
   permanent error records); the launcher installs all extras.
 - `fetch` refuses a changed unpinned file unless `--accept-new-data`, and refuses

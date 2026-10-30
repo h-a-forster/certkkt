@@ -179,11 +179,26 @@ def test_fetch_refuses_a_changed_unpinned_file(data_root):
     fetch("french", data_root, names={name}, log=print)  # the new snapshot is now recorded
 
 
-def test_downloads_follow_redirects_only_to_source_hosts():
+def test_downloads_follow_redirects_only_to_source_hosts(tmp_path, monkeypatch):
     import urllib.error
     import urllib.request
 
+    from certkkt import datasets
     from certkkt.datasets import SOURCES, _SourceHostsOnly
+
+    # fetch downloads through the restricted opener, never plain urlopen.
+    assert any(isinstance(h, _SourceHostsOnly) for h in datasets._OPENER.handlers)
+
+    def opened(url, timeout):
+        raise LookupError(url)
+
+    def unrestricted(*args, **kwargs):
+        raise AssertionError("urlopen bypasses the redirect check")
+
+    monkeypatch.setattr(datasets._OPENER, "open", opened)
+    monkeypatch.setattr(urllib.request, "urlopen", unrestricted)
+    with pytest.raises(LookupError, match="QPDATA1.ZIP"):
+        datasets.fetch("mm", tmp_path, names={"QPDATA1.ZIP"}, log=print)
 
     req = urllib.request.Request(SOURCES["mm"] + "QPDATA1.ZIP")
     redirect = _SourceHostsOnly().redirect_request

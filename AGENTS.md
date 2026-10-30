@@ -12,8 +12,9 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 
 ## Conventions
 
-- uv + hatchling, `src/certkkt`, Python 3.11+ (3.12 is the study environment, because
-  ECOS has no 3.13 wheel). Typed code, ruff (line length 100), pytest.
+- uv + hatchling, `src/certkkt`, Python 3.11+ (3.12 is the study and CI environment,
+  because ECOS has no 3.13 wheel: on 3.13 cblib, portfolio and mittelmann study runs
+  refuse to start). Typed code, ruff (line length 100), pytest.
 - `uv.lock` is committed; `exclude-newer` keeps resolution to releases at least a week
   old. A dependency bump is its own change and invalidates published study numbers.
 - Soundness rule: only `certify.py` decides levels, always from exact data and an exact
@@ -92,3 +93,8 @@ Next steps, in order:
    x by O(1) or more; a float rank-revealing basis choice should fix most cases.
 5. Farkas certificates for infeasibility/unboundedness claims; PSD cone (where the dual
    membership certificates of Lee, Papp and Varga become necessary).
+6. HiGHS tolerance (commit 2a69522): the optimality options showed no effect on the QP
+   suite; find a behavioural test or revert them.
+7. `_input_files` docstring (study.py) says it hashes each data file the units read, but
+   it records every French zip (and every Maros-Meszaros archive) present once any unit
+   of that suite runs: fix the wording or the code.

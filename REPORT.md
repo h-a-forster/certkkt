@@ -26,42 +26,61 @@ run yet; its launcher and time estimate are in AGENTS.md. Every number below com
 ## 2. Headline
 
 Exact certification of default solver output, Maros-Meszaros subset (n = 40 problems per
-solver; 95% Wilson intervals):
+solver; nominal 95% Wilson intervals, see section 6):
 
-| solver | claims optimal | as-is certified at 1e-6 | as-is at 1e-8 | exact optimum after repair |
-|---|---|---|---|---|
-| Clarabel | 40/40 | 37/40 = 92% [80, 97] | 30/40 = 75% [60, 86] | 23/40 = 58% [42, 71] |
-| HiGHS | 39/40 | 23/40 = 58% [42, 71] | 5/40 = 12% [5, 26] | 29/40 = 72% [57, 84] |
-| SCS | 40/40 | 16/40 = 40% [26, 55] | 7/40 = 18% [9, 32] | 22/40 = 55% [40, 69] |
-| OSQP | 33/40 | 3/40 = 8% [3, 20] | 0/40 = 0% [0, 9] | 19/40 = 48% [33, 63] |
+| solver | claims optimal | as-is certified at 1e-6 | as-is at 1e-8 | as-is at own default tol | exact optimum after repair |
+|---|---|---|---|---|---|
+| Clarabel | 40/40 | 37/40 = 93% [80, 97] | 30/40 = 75% [60, 86] | 30/40 = 75% [60, 86] (1e-8) | 23/40 = 58% [42, 71] |
+| HiGHS | 39/40 | 23/40 = 58% [42, 71] | 5/40 = 13% [5, 26] | 14/40 = 35% [22, 50] (1e-7) | 29/40 = 73% [57, 84] |
+| SCS | 40/40 | 16/40 = 40% [26, 55] | 7/40 = 18% [9, 32] | 30/40 = 75% [60, 86] (1e-4) | 22/40 = 55% [40, 69] |
+| OSQP | 33/40 | 3/40 = 8% [3, 20] | 0/40 = 0% [0, 9] | 21/40 = 53% [37, 67] (1e-3) | 19/40 = 48% [33, 63] |
 
 "Certified at eps" means every exact relative residual (primal, dual, gap; DESIGN 3.2)
-is at most eps. "Exact optimum" means the repairs found an exactly feasible primal-dual
-pair with gap exactly zero (an exact rational optimum).
+is at most eps. "Own default tol" applies that test at the solver's documented default
+tolerance, in certkkt's measure (not the solver's stopping criterion). "Exact optimum"
+means the repairs found an exactly feasible primal-dual pair with gap exactly zero (an
+exact rational optimum).
 
 1. **Status "optimal" says little at tight thresholds.** Among units whose solver
    reported optimal, the exact residuals exceed 1e-6 for 3/40 Clarabel, 16/39 HiGHS,
-   24/40 SCS and 30/33 OSQP units. OSQP's and SCS's default tolerances (1e-3 and 1e-4)
-   explain most of it. Over all default units failing 1e-6, the binding measure is the
-   dual residual (45) or the gap (32) far more often than primal feasibility (11, mostly
-   SCS).
-2. **Exact optima are recoverable for about half of these small QPs, from any solver.**
+   24/40 SCS and 30/33 OSQP units. Even at each solver's own default tolerance, 10/40
+   Clarabel (1e-8), 25/39 HiGHS (1e-7), 10/40 SCS (1e-4) and 12/33 OSQP (1e-3) of these
+   units miss in certkkt's measure. Loose defaults plausibly account for much of the
+   OSQP and SCS gap at 1e-6, but the quick profile runs Maros-Meszaros at defaults only,
+   so this is a hypothesis for the full profile's tolerance sweep to test. Tolerance does
+   not explain HiGHS: its QP output misses its own 1e-7 on 25/39 units claiming optimal,
+   with the gap (13) or the dual residual (12) as the binding measure. Over all default
+   units failing 1e-6, the binding measure is the dual residual (45) or the gap (32) far
+   more often than primal feasibility (11, 7 of them SCS).
+2. **Exact optima, paired by problem.** 29/40 problems reach an exact optimum from at
+   least one solver (19/40 from all four; 11/40 from none), and every one of the 29 is
+   reached from HiGHS output: no problem had an exact optimum from Clarabel, SCS or OSQP
+   output alone. HiGHS beats OSQP after a Holm correction over the 6 pairs (10 problems
+   to 0, exact McNemar p = 0.002, adjusted 0.012); its lead over SCS (7 to 0, p = 0.016)
+   and Clarabel (6 to 0, p = 0.031) is suggestive but does not survive the correction.
    All 93 exact optima came from the active-set repair (exact KKT solve on the active set
    read off the floats), including from poor floats (OSQP: 0/40 certified at 1e-8 as is,
-   19/40 exact optima). The exact optimum depends only on the problem, so the spread
-   between solvers measures how well each solver's output identifies the active set:
-   HiGHS (an active-set QP solver) is best.
-3. **Float64 evaluation of the residuals was never wrong at 1e-8.** On all 190 default
-   units, float64 and exact evaluation agreed about `max_rel <= 1e-8`. The value of exact
-   arithmetic here lies in the certificates (exact feasibility, exact bounds, exact
+   19/40 exact optima). The exact optimum depends only on the problem, so these counts
+   measure how well each solver's output identifies the active set; HiGHS is an
+   active-set QP solver.
+3. **Float64 evaluation of the residuals was never wrong at 1e-8.** On all 189 default
+   units with a solution, float64 and exact evaluation agreed about `max_rel <= 1e-8`.
+   The threshold test alone has little power (only 14 units have an exact `max_rel`
+   within a factor of 2 of 1e-8), but the discrepancies are small throughout: the largest
+   |log10(float64 / exact)| of `max_rel` is 0.15, at values near 1e-16. The value of
+   exact arithmetic here lies in the certificates (exact feasibility, exact bounds, exact
    optima), not in re-evaluating residuals.
-4. **Portfolio SOCPs: exact two-sided bounds from every Clarabel and ECOS solve.** The
-   interior repair turned all 6 default Clarabel and all 6 default ECOS solutions into
-   `bounded` certificates (exactly feasible primal and dual) with exact relative gap at
-   most 1e-6 (6/6 = 100% [61, 100] each; at most 1e-8: 3/6 and 5/6). SCS: 1/6 at 1e-6.
-   The optima are irrational, so `optimal` is not expected.
+4. **Portfolio SOCPs: exact two-sided bounds from every solve; the gap is what differs.**
+   All 72 portfolio units (every solver and tolerance) were repaired to `bounded`
+   certificates (exactly feasible primal and dual). At defaults the exact relative gap is
+   at most 1e-6 for 6/6 Clarabel, 6/6 ECOS and 1/6 SCS solves (at most 1e-8: 3/6, 5/6 and
+   0/6); SCS default gaps range from 2.2e-7 to 6.7e-4. The interior push costs about two
+   orders of magnitude of relative gap against the as-is gap: the repaired gap tracks the
+   as-is `max_rel`, not the as-is `rel_gap` (Clarabel defaults: as-is `rel_gap` 8e-12 to
+   5e-10, repaired gap 7e-9 to 5e-8). The optima are irrational, so `optimal` is not
+   expected.
 5. **CBLIB SOCPs: no exact certificate within the quick budget.** 0/12 units reached
-   `bounded`; the interior repair exhausted its 30 s budget on all four instances (20-30
+   `bounded`; the interior repair exhausted its 30 s budget on all four instances (20-44
    thousand nonzeros). Section 4 describes the second obstacle, found on nql30.
 
 ## 3. Requested tolerance versus certified accuracy (portfolio family)
@@ -88,7 +107,10 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
 
 - **QPs:** of the 109 mm units with an `optimal` or `bounded` best certificate, 93 came
   from `active_set`, 7 from `snapped`, 6 from `interior` and 3 from `fixed`. Repairs used
-  982 of the 990 CPU seconds spent on mm units.
+  982 of the 990 wall-clock seconds spent on mm units (per-unit times summed over 4
+  parallel workers). Much of that is budget exhaustion rather than useful work: on 15 mm
+  units the interior repair ran out of the 30 s budget, and on 23 the active-set KKT
+  systems were inconsistent.
 - **SOCPs, why the interior push needed two changes** (both regression-tested): a cone
   whose head is a constant (the turnover budget `||w - w0|| <= tau`) or pinned by
   stationarity (the epigraph variable `t` in `||R w|| <= t`) cannot gain room by raising
@@ -126,9 +148,12 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
 ## 6. Limitations
 
 - Quick profile only: small Maros-Meszaros problems (40 of 138, the easy end), 4 of 18
-  CBLIB instances, 6 of 54 portfolio instances. Shares will move on the full sets. The
-  intervals describe this instance set, not a population of problems, and instances
-  within a family are related.
+  CBLIB instances, 6 of 54 portfolio instances. Shares will move on the full sets.
+- The counts describe this instance set exactly. The Wilson intervals are nominal: they
+  would apply to a hypothetical exchangeable population of small Maros-Meszaros-like
+  QPs, but the instances were selected by file size (the easy end) and families share
+  data (the 6 portfolio instances use the same returns), so the intervals are optimistic
+  and say nothing about the full benchmark sets.
 - Repair success rates are bounded by the time budget (30 s) and by pure-Python exact
   elimination; a failed repair is not evidence that no exact certificate exists.
 - certkkt's relative measures are not the solvers' stopping criteria; "meets the

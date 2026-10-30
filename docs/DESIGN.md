@@ -128,6 +128,10 @@ The dual bound needs `P` positive semidefinite. `psd_check` decides it exactly
 not PSD or the budget runs out ("unknown"), dual-based levels are downgraded and a note
 says why. A negative gap for an exactly feasible pair is impossible and raises.
 
+The levels are partially ordered: `optimal` implies `bounded`, which implies both one-sided
+levels, but `primal_feasible` and `dual_feasible` are incomparable. A required level
+(`--require-level`, `assert_level`) is met by any certificate that implies it.
+
 ### 3.4 Reporting
 
 `Certificate.to_dict` rounds residuals and relative measures *up* to floats (rigorous
@@ -235,20 +239,29 @@ Per suite and solver (and tolerance), over all planned units (failed solves, tim
 and errors count as not certified):
 
 - **E1 as-is certification share** at eps in {1e-4, 1e-6, 1e-8}: share of units whose
-  solver floats have `max_rel <= eps` in exact arithmetic.
+  solver floats have `max_rel <= eps` in exact arithmetic; also at each solver's
+  documented default tolerance (in certkkt's measure, not the solver's).
 - **E2 repaired certification share** at eps: share with a best certificate of level
   `optimal` or `bounded` and exact relative gap `<= eps` (an exactly feasible pair that
   proves eps-optimality); and **E2'** the share with an exact optimum (`optimal`).
 - **E3 tolerance map**: by requested tol, the median and quartiles of log10 of the exact
   as-is `max_rel` and `rel_gap`, and the share with `max_rel <= tol`.
-- **E4 float-versus-exact disagreement**: units where float64 evaluation of the same
-  residuals and exact evaluation disagree about `max_rel <= 1e-8`.
+- **E4 float-versus-exact disagreement**: among units where both can be evaluated, those
+  where float64 evaluation of the same residuals and exact evaluation disagree about
+  `max_rel <= 1e-8`, with the largest log10 ratio of the two `max_rel` values.
 - **E5 Mittelmann**: per instance, the solver's status, time, as-is `max_rel` and best
   level; the count of default-setting Clarabel solves with status `optimal`.
+- **E6 paired solver comparison**: on the instances every solver of a suite ran, per
+  solver pair, the problems with an exact optimum from only one of the two, an exact
+  McNemar test and Holm adjustment over the pairs; plus the union and intersection.
 
-Shares carry 95% Wilson score intervals. Units within a suite are not independent draws
-from a population (families of related instances), so the intervals describe sampling
-variation of a binomial with the observed instance set, not a population of problems.
+The counts are exact, descriptive facts about this instance set (each solver ran once per
+unit). Shares also carry 95% Wilson score intervals, which are nominal: they describe
+uncertainty about a hypothetical exchangeable population of similar problems (for the
+quick profile, small Maros-Meszaros-like QPs). The instances are not a random sample of
+any population: they are selected by file size (the easy end) and come in families
+sharing data, so the intervals are optimistic and do not extend to the full benchmark
+sets.
 
 ## 7. Prior art
 

@@ -111,9 +111,9 @@ certkkt study report --profile quick
 ## Related work
 
 VIPR, exact SCIP and SoPlex certify LP and MIP results exactly; qpbenchmark compares QP
-solvers by tolerance-based residuals; CVQP (arXiv:2504.10814) is a QP benchmark. certkkt
-covers convex QP and SOCP solutions and reports exact residuals. See
-[docs/DESIGN.md](docs/DESIGN.md) section 7.
+solvers by tolerance-based residuals; CVQP (arXiv:2504.10814) is an operator-splitting
+method for large CVaR-constrained QPs. certkkt covers convex QP and SOCP solutions and
+reports exact residuals. See [docs/DESIGN.md](docs/DESIGN.md) section 7.
 
 ## Licence
 

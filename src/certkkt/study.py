@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import platform
 import queue
@@ -357,6 +358,18 @@ def read_records(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _finite(v: Any) -> Any:
+    """Copy of a record with non-finite floats (a solver's nan or inf objective, float64
+    residuals that overflowed) replaced by None, which strict JSON can hold."""
+    if isinstance(v, float):
+        return v if math.isfinite(v) else None
+    if isinstance(v, dict):
+        return {k: _finite(x) for k, x in v.items()}
+    if isinstance(v, list | tuple):
+        return [_finite(x) for x in v]
+    return v
+
+
 class _Sink:
     """Appends records and progress lines, thread-safe, flushed to disk per record."""
 
@@ -386,7 +399,7 @@ class _Sink:
             self.echo(line)
 
     def record(self, rec: dict[str, Any]) -> None:
-        line = json.dumps(rec, separators=(",", ":"), allow_nan=False, default=str)
+        line = json.dumps(_finite(rec), separators=(",", ":"), allow_nan=False, default=str)
         with self.lock:
             with self.units.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
@@ -453,14 +466,25 @@ def run_study(
     work: queue.Queue[tuple[str, str, list[Unit]]] = queue.Queue()
     for (suite, name), us in groups.items():
         work.put((suite, name, us))
+    errors: list[BaseException] = []
+
+    def drive() -> None:
+        try:
+            _drive(work, profile, data_root, sink)
+        except BaseException as exc:  # re-raised below so the run does not report success
+            errors.append(exc)
+
     threads = [
-        threading.Thread(target=_drive, args=(work, profile, data_root, sink), daemon=True)
+        threading.Thread(target=drive, daemon=True)
         for _ in range(min(workers, max(1, len(groups))))
     ]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
+    if errors:
+        sink.log(f"failed: {errors[0]!r}; {sink.new} new units recorded")
+        raise RuntimeError("a study driver thread failed") from errors[0]
     sink.log(f"finished: {sink.new} new units, {sink.done}/{sink.total} total")
     return sink.new
 

@@ -125,6 +125,28 @@ def test_study_records_timeouts_and_replaces_the_worker(tmp_path, data_root, mon
     assert [r["outcome"] for r in recs] == ["timeout", "timeout"]
 
 
+def test_sink_records_non_finite_values_as_null(tmp_path):
+    sink = study._Sink(tmp_path, 1, 0, lambda s: None)
+    sink.record({"key": "k", "result": {"objective": float("nan")}, "float": [float("inf")]})
+    (rec,) = study.read_records(tmp_path / "units.jsonl")
+    assert rec["result"]["objective"] is None and rec["float"] == [None]
+
+
+def test_study_fails_loudly_when_a_driver_thread_dies(tmp_path, data_root, monkeypatch):
+    def boom(*args):
+        raise ValueError("driver failed")
+
+    monkeypatch.setattr(study, "_drive", boom)
+    with pytest.raises(RuntimeError, match="driver thread failed"):
+        study.run_study(
+            "quick",
+            ("portfolio",),
+            run_dir=tmp_path / "run",
+            data_root=data_root,
+            echo=lambda s: None,
+        )
+
+
 def test_plan_rejects_unknown_suite(tmp_path):
     with pytest.raises(ValueError, match="unknown suite"):
         study.plan(study.PROFILES["quick"], ("nope",), tmp_path)

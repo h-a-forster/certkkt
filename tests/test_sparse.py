@@ -5,7 +5,7 @@ import pytest
 import scipy.sparse as sp
 
 from certkkt.rational import Q, to_q
-from certkkt.sparse import BudgetExceeded, QMatrix, psd_check, solve_any, vstack
+from certkkt.sparse import BudgetExceeded, QMatrix, psd_check, solve_any, solve_sparse, vstack
 
 
 def _rand_qmatrix(rng, m, n, density=0.4, lo=-5, hi=5):
@@ -55,21 +55,29 @@ def test_vstack():
     assert s.shape == (3, 2) and s.row(2) == ([1], [Q(3)])
 
 
+@pytest.mark.parametrize("solve", [solve_any, solve_sparse])
 @pytest.mark.parametrize("seed", range(20))
-def test_solve_any_square_and_rectangular(seed):
+def test_solve_any_square_and_rectangular(seed, solve):
     rng = random.Random(seed)
     m, n = rng.randint(1, 8), rng.randint(1, 8)
     A = _rand_qmatrix(rng, m, n, density=0.5)
     x_true = [Q(rng.randint(-5, 5), rng.randint(1, 3)) for _ in range(n)]
     rhs = A.matvec(x_true)  # consistent by construction
-    x = solve_any(A.row_dicts(), rhs, n, col_penalty={0: 1})
+    x = solve(A.row_dicts(), rhs, n, col_penalty={0: 1})
     assert x is not None and A.matvec(x) == rhs
+    # A duplicated row keeps it consistent but rank deficient; a perturbed copy breaks it.
+    rows = [*A.row_dicts(), A.row_dicts()[0]]
+    x = solve(rows, [*rhs, rhs[0]], n)
+    assert x is not None and A.matvec(x) == rhs
+    if A.row_dicts()[0]:
+        assert solve(rows, [*rhs, rhs[0] + 1], n) is None
 
 
-def test_solve_any_detects_inconsistency():
+@pytest.mark.parametrize("solve", [solve_any, solve_sparse])
+def test_solve_any_detects_inconsistency(solve):
     rows = [{0: Q(1), 1: Q(1)}, {0: Q(2), 1: Q(2)}]
-    assert solve_any(rows, [Q(1), Q(3)], 2) is None
-    x = solve_any(rows, [Q(1), Q(2)], 2)
+    assert solve(rows, [Q(1), Q(3)], 2) is None
+    x = solve(rows, [Q(1), Q(2)], 2)
     assert x is not None and x[0] + x[1] == 1
 
 

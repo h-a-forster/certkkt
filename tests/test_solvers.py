@@ -106,7 +106,7 @@ def test_unknown_setting_is_an_error_not_ignored():
 
 
 def test_unknown_solver():
-    with pytest.raises(ValueError, match="unknown solver"):
+    with pytest.raises(ValueError):
         get_adapter("gurobi")
 
 

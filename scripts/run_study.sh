@@ -22,13 +22,13 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') longrun: $*" >> "$LOG"; }
 
 log "start run_dir=$RUN_DIR suites=[$SUITES] workers=$WORKERS"
 for attempt in 1 2 3; do
-  uv run --locked certkkt fetch "${FETCH[@]}" >> "$LOG" 2>&1 \
-    && uv run --locked certkkt study run --profile full "${SUITE_ARGS[@]}" \
+  uv run --locked --all-extras certkkt fetch "${FETCH[@]}" >> "$LOG" 2>&1 \
+    && uv run --locked --all-extras certkkt study run --profile full "${SUITE_ARGS[@]}" \
          --run-dir "$RUN_DIR" --workers "$WORKERS" "${EXTRA[@]}" >> "$LOG" 2>&1
   rc=$?
   if [ "$rc" -eq 0 ]; then
     log "study finished on attempt $attempt"
-    uv run --locked certkkt study report --profile full --run-dir "$RUN_DIR" \
+    uv run --locked --all-extras certkkt study report --profile full --run-dir "$RUN_DIR" \
       --out "$RUN_DIR/report.md" --json "$RUN_DIR/summary.json" >> "$LOG" 2>&1
     log "report written to $RUN_DIR/report.md"
     exit 0

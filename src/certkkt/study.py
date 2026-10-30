@@ -436,10 +436,16 @@ def run_study(
         raise ValueError("workers must be at least 1")
     profile = PROFILES[profile_name]
     units = plan(profile, suites, data_root)
-    run_dir.mkdir(parents=True, exist_ok=True)
     done = completed_keys(run_dir / "units.jsonl")
     remaining = [u for u in units if u.key not in done]
     todo = remaining if max_units is None else remaining[:max_units]
+    # A missing solver would turn every one of its units into a permanent error record.
+    from certkkt.solvers import ADAPTERS
+
+    missing = sorted({u.solver for u in todo if not ADAPTERS[u.solver].available()})
+    if missing:
+        raise RuntimeError(f"solvers not installed: {missing} (uv sync --all-extras)")
+    run_dir.mkdir(parents=True, exist_ok=True)
     sink = _Sink(run_dir, len(units), len(units) - len(remaining), echo)
     # One manifest entry per call: versions can differ between resumed calls.
     manifest = run_dir / "manifest.json"

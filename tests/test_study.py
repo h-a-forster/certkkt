@@ -166,6 +166,17 @@ def test_study_fails_loudly_when_a_driver_thread_dies(tmp_path, data_root, monke
         )
 
 
+def test_study_refuses_to_start_without_a_solver(tmp_path, data_root, monkeypatch):
+    from certkkt.solvers import ADAPTERS
+
+    monkeypatch.setattr(ADAPTERS["ecos"], "available", lambda: False)
+    with pytest.raises(RuntimeError):
+        study.run_study(
+            "quick", ("portfolio",), run_dir=tmp_path / "run", data_root=data_root, echo=print
+        )
+    assert not (tmp_path / "run").exists()
+
+
 def test_plan_rejects_unknown_suite(tmp_path):
     with pytest.raises(ValueError, match="unknown suite"):
         study.plan(study.PROFILES["quick"], ("nope",), tmp_path)

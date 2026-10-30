@@ -39,7 +39,7 @@ jobs:
           uv run ruff format --check .
 
       - name: Test
-        run: uv run pytest -m "not slow"
+        run: uv run pytest   # includes the slow study-runner tests (about 15 s)
 
       - name: Test with the pure-Python rational backend
         env:

@@ -126,9 +126,10 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
   equality rows exactly independent. A rank-revealing basis choice is the planned fix
   (AGENTS.md, next steps).
 
-## 5. Mittelmann's SOCP benchmark and "Clarabel 14/18"
+## 5. Mittelmann SOCP benchmark: coverage and reproduction
 
-- The claim could not be traced to the benchmark. Mittelmann's "Large Second Order Cone
+- A figure of Clarabel solving 14 of the 18 instances could not be traced to the
+  benchmark. Mittelmann's "Large Second Order Cone
   Benchmark" (https://plato.asu.edu/ftp/socp.html) lists MOSEK, ECOS, KNITRO, COPT,
   Gurobi, OPTVERSE, cuOpt or COPT-PDHCG in every version checked: the live page dated
   26 Oct 2026 and Internet Archive snapshots of pages dated 12 Nov 2022, 11 Sep 2024,

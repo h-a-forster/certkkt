@@ -68,8 +68,9 @@ variables `SUITES`, `WORKERS`, `RUN_DIR`, `MAX_UNITS` and `LOG` restrict or redi
 
 ## Status and next steps
 
-Status (2026-10-30): v0.1.0. Library, CLI, plugin and adapters done and tested (104
-tests); quick study run and reported in REPORT.md; full study not yet run.
+Status (2026-10-30): v0.1.0. Library, CLI, plugin and adapters done and tested (138
+tests, all passing locally; the CI workflow has not run on GitHub yet); quick study run
+and reported in REPORT.md; full study not yet run.
 
 Full-profile time estimate (3 workers), from measured units: small Maros-Meszaros units
 about 6 s, 100 kB-1 MB files 2-28 s, larger files about 90 s (repairs overshoot their
@@ -84,8 +85,7 @@ Next steps, in order:
 
 1. Run the full profile (long run) and fold `runs/full/report.md` into REPORT.md.
 2. Mittelmann SOCP: obtain the 11 instances that are not on CBLIB's download list (fir*,
-   dsNRL, wbNRL) and a float-only path for beam30 (64M nonzeros) to test the
-   "Clarabel 14/18" claim on all 18.
+   dsNRL, wbNRL) and a float-only path for beam30 (64M nonzeros) to cover all 18.
 3. Repair speed: exact elimination in pure Python dominates repair time above ~10^4
    nonzeros; a compiled sparse rational LU (e.g. via FLINT) would lift the size limit.
 4. Ill-conditioned equality systems (nql/qssp in CBLIB): the exact basic correction moves

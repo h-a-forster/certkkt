@@ -29,6 +29,8 @@ recomputed exactly); the repairs are heuristics whose success rate is measured i
 uv add "certkkt[all] @ git+https://github.com/h-a-forster/certkkt"   # or: pip install ...
 ```
 
+The repository is private for now, so this works only with access to it.
+
 Extras: `clarabel`, `scs`, `osqp`, `ecos` (wheels up to Python 3.12), `highs`, `cvxpy`,
 `solvers` (all five), `all` (solvers and cvxpy).
 

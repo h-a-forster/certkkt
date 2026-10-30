@@ -41,7 +41,7 @@ from typing import Any
 import numpy as np
 
 from certkkt.problem import ConicProblem
-from certkkt.rational import ONE, ZERO, Q, dot, max_abs, q_float_up, sqrt_up, to_q
+from certkkt.rational import ONE, ZERO, Q, _nearest, dot, max_abs, q_float_up, sqrt_up, to_q
 from certkkt.sparse import DEFAULT_BUDGET, psd_check
 
 LEVELS = ("optimal", "bounded", "primal_feasible", "dual_feasible", "residuals")
@@ -138,7 +138,7 @@ class Certificate:
             return None if v is None else q_float_up(v)
 
         def near(v: Any | None) -> float | None:
-            return None if v is None else int(v.numerator) / int(v.denominator)
+            return None if v is None else _nearest(v)  # +-inf beyond the float range
 
         return {
             "method": self.method,

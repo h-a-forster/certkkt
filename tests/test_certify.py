@@ -74,6 +74,8 @@ def test_to_dict_handles_huge_rationals():
     assert d["exact_gap"] is None
     assert d["gap_up"] > 0  # rounded up, so a positive gap stays positive
     assert certify(p, [Q(1, 2), Q(1, 2)], [1, 0, 0]).to_dict()["exact_gap"] == "0"
+    # Objectives beyond the float range become inf instead of raising OverflowError.
+    assert certify(p, [Q(10) ** 400, 0], [1, 0, 0]).to_dict()["pobj"] == math.inf
 
 
 def test_rel_measures_upper_bound_float_values():

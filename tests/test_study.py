@@ -166,6 +166,32 @@ def test_study_fails_loudly_when_a_driver_thread_dies(tmp_path, data_root, monke
         )
 
 
+def test_fetch_refuses_a_changed_unpinned_file(data_root):
+    from certkkt.datasets import ChecksumError, fetch
+
+    name = "10_Industry_Portfolios_CSV.zip"
+    assert len(fetch("french", data_root, names={name}, log=print)) == 1  # records its hash
+    with zipfile.ZipFile(data_root / "raw" / "french" / name, "a") as zf:
+        zf.writestr("extra.txt", "upstream update")
+    with pytest.raises(ChecksumError):
+        fetch("french", data_root, names={name}, log=print)
+    fetch("french", data_root, names={name}, log=print, accept_new_data=True)
+    fetch("french", data_root, names={name}, log=print)  # the new snapshot is now recorded
+
+
+def test_manifest_records_input_file_hashes(tmp_path, data_root):
+    from certkkt.datasets import sha256_file
+
+    run = tmp_path / "run"
+    study.run_study(
+        "quick", ("portfolio",), run_dir=run, data_root=data_root, max_units=0, echo=print
+    )
+    (call,) = json.loads((run / "manifest.json").read_text())["calls"]
+    rel = "raw/french/10_Industry_Portfolios_CSV.zip"
+    zf = data_root / rel
+    assert call["inputs"] == {rel: {"sha256": sha256_file(zf), "bytes": zf.stat().st_size}}
+
+
 def test_study_refuses_to_start_without_a_solver(tmp_path, data_root, monkeypatch):
     from certkkt.solvers import ADAPTERS
 

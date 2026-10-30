@@ -187,7 +187,10 @@ seconds is possible).
 | `mittelmann` | the 18 instances of Mittelmann's "Large Second Order Cone Benchmark" (https://plato.asu.edu/ftp/socp.html); 7 are on CBLIB's public download list (beam7, beam30, chainsing-50000-1/2/3, db-joint-soerensen, db-plate-yield-line); fir*, dsNRL and wbNRL are not | CBLIB | SHA-256 recorded for 5; beam7/beam30 recorded on first download |
 | `portfolio` | 54 min-variance SOCPs (section 5.3) | Ken French data library, 10/30/49 industry portfolios | checksum recorded on first download (the files are updated monthly) |
 
-Downloads go to `data/raw/` (gitignored); nothing is redistributed.
+Downloads go to `data/raw/` (gitignored); nothing is redistributed. A file whose
+checksum was only recorded on first download is refused if it later differs, unless
+`certkkt fetch --accept-new-data` is given, and every study call records the SHA-256 and
+size of each input file in its manifest entry (`inputs`).
 
 ### 5.2 Solvers per suite
 

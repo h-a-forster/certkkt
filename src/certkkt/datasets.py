@@ -141,12 +141,15 @@ def fetch(
     names: set[str] | None = None,
     log: Callable[[str], None] = print,
     timeout: float = 120.0,
+    accept_new_data: bool = False,
 ) -> list[Path]:
     """Download (or verify already present) files of a suite into ``root/raw/<suite>``.
 
     ``names`` restricts the download to those file names (without ``.cbf.gz``). Existing
     files are verified, not re-downloaded. Raises ChecksumError on any mismatch, before
-    the file is moved into place.
+    the file is moved into place. Files without a pinned checksum (the French zips, which
+    change upstream) are checked against the hash recorded at their first download;
+    ``accept_new_data`` records a changed file instead of refusing it.
     """
     files = remote_files(suite)
     if names is not None:
@@ -160,7 +163,7 @@ def fetch(
     for rf in files:
         dest = root / "raw" / rf.suite / rf.name
         if dest.exists():
-            _verify(rf, dest, log)
+            _verify(rf, dest, log, accept_new_data)
             out.append(dest)
             continue
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -180,7 +183,7 @@ def fetch(
                 tmp_path.unlink(missing_ok=True)
                 raise
         try:
-            _verify(rf, tmp_path, log)
+            _verify(rf, tmp_path, log, accept_new_data)
         except ChecksumError:
             tmp_path.unlink(missing_ok=True)
             raise
@@ -190,7 +193,7 @@ def fetch(
     return out
 
 
-def _verify(rf: RemoteFile, path: Path, log: Callable[[str], None]) -> None:
+def _verify(rf: RemoteFile, path: Path, log: Callable[[str], None], accept_new: bool) -> None:
     digest = sha256_file(path)
     if rf.sha256 is not None:
         if digest != rf.sha256:
@@ -203,7 +206,10 @@ def _verify(rf: RemoteFile, path: Path, log: Callable[[str], None]) -> None:
             h, _, n = line.partition("  ")
             known[n] = h
     if rf.name in known and known[rf.name] != digest:
-        log(f"  note: {rf.name} changed since first download ({known[rf.name][:12]}...)")
+        msg = f"{rf.name} changed since first download ({known[rf.name][:12]}...)"
+        if not accept_new:
+            raise ChecksumError(f"{msg}; pass --accept-new-data to use the new snapshot")
+        log(f"  note: {msg}")
     known[rf.name] = digest
     sums.write_text("".join(f"{h}  {n}\n" for n, h in sorted(known.items())))
 

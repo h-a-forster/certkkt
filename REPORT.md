@@ -21,7 +21,9 @@ run yet; its launcher and time estimate are in AGENTS.md. Every number below com
 - **Outcomes:** 243 units produced a solution and were certified; 1 had no solution
   (HiGHS "Solve error" on QSHARE1B). No timeouts or crashes.
 - **Data:** problem files read as exact decimals; archives checked against recorded
-  SHA-256 (`src/certkkt/datasets.py`).
+  SHA-256 (`src/certkkt/datasets.py`). The French returns files have no pinned checksum
+  (they change monthly upstream); the snapshot used is in
+  [docs/results/quick-french-SHA256SUMS](docs/results/quick-french-SHA256SUMS).
 
 ## 2. Headline
 

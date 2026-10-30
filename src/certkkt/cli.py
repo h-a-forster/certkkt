@@ -159,7 +159,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
     names = set(args.only) if args.only else None
     for suite in args.suites:
-        paths = fetch(suite, Path(args.data), names=names)
+        paths = fetch(suite, Path(args.data), names=names, accept_new_data=args.accept_new_data)
         print(f"{suite}: {len(paths)} files ok")
     return 0
 
@@ -251,6 +251,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("suites", nargs="+", choices=("mm", "cblib", "mittelmann", "french"))
     sp.add_argument("--only", nargs="*", help="restrict to these file names")
     sp.add_argument("--data", default="data")
+    sp.add_argument(
+        "--accept-new-data",
+        action="store_true",
+        help="record a changed unpinned file (French returns) instead of refusing it",
+    )
     sp.set_defaults(func=cmd_fetch)
 
     sp = sub.add_parser("study", help="run, inspect or report the certification study")

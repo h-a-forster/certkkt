@@ -457,6 +457,7 @@ def run_study(
             "versions": versions(),
             "solvers": _solver_versions(),
             "platform": platform.platform(terse=True),
+            "inputs": _input_files(units, data_root),
             "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
     )
@@ -493,6 +494,27 @@ def run_study(
         raise RuntimeError("a study driver thread failed") from errors[0]
     sink.log(f"finished: {sink.new} new units, {sink.done}/{sink.total} total")
     return sink.new
+
+
+def _input_files(units: list[Unit], data_root: Path) -> dict[str, dict[str, Any]]:
+    """SHA-256 and size of each data file the units read (the French zips have no pinned
+    checksum and change upstream, so the manifest records which snapshot a call used)."""
+    from certkkt.datasets import FRENCH_FILES, MM_ARCHIVES, sha256_file
+
+    rels: set[str] = set()
+    for u in units:
+        if u.suite == "mm":
+            rels.update(f"raw/mm/{a}" for a in MM_ARCHIVES)
+        elif u.suite == "portfolio":
+            rels.update(f"raw/french/{f}" for f in FRENCH_FILES.values())
+        else:
+            rels.add(f"raw/cblib/{u.instance}.cbf.gz")
+    out = {}
+    for rel in sorted(rels):
+        path = data_root / rel
+        if path.exists():
+            out[rel] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
+    return out
 
 
 def _solver_versions() -> dict[str, str]:

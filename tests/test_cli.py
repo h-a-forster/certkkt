@@ -62,6 +62,14 @@ def test_require_level_checks_every_repair_certificate(tmp_path, lp_file, monkey
     assert main([*args, "primal_feasible"]) == 1
 
 
+def test_malformed_require_eps_is_a_usage_error(tmp_path, lp_file):
+    sol = tmp_path / "sol.json"
+    sol.write_text(json.dumps({"x": [0.5, 0.5], "z": [1, 0, 0]}))
+    with pytest.raises(SystemExit) as exc:
+        main(["certify", str(lp_file), str(sol), "--require-eps", "1e-6x"])
+    assert exc.value.code == 2
+
+
 def test_bad_solution_file_is_rejected(tmp_path, lp_file):
     sol = tmp_path / "sol.json"
     sol.write_text(json.dumps({"x": [0.5, 0.5], "z": [1, 0, 0], "y_row": [1]}))

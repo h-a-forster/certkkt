@@ -222,7 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
             help="seconds for all repair methods together (default 60)",
         )
         sp.add_argument("--json", action="store_true", help="print JSON")
-        sp.add_argument("--require-eps", help="exit 1 unless certified at this eps")
+        sp.add_argument("--require-eps", type=_eps, help="exit 1 unless certified at this eps")
         sp.add_argument(
             "--require-level",
             choices=LEVELS,
@@ -270,6 +270,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--json", help="report: write the summary JSON here")
     sp.set_defaults(func=cmd_study)
     return p
+
+
+def _eps(text: str) -> str:
+    """Validate an exact decimal at parse time, before any solve or repair runs."""
+    from certkkt.rational import to_q
+
+    try:
+        to_q(text)
+    except (ValueError, TypeError):
+        raise argparse.ArgumentTypeError(f"not an exact decimal: {text!r}") from None
+    return text
 
 
 def main(argv: list[str] | None = None) -> int:

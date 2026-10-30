@@ -92,9 +92,10 @@ def test_adapter_convention(name, make):
 def test_tolerance_and_time_limit_settings_are_accepted():
     for name in sorted(ADAPTERS):
         a = get_adapter(name)
-        if not a.available() or a.unsupported_reason(socp()):
+        if not a.available():
             continue
-        res = a.solve(socp(), {**a.tolerance_settings(1e-9), **a.time_limit_settings(30)})
+        inst = boxed_qp() if a.unsupported_reason(socp()) else socp()
+        res = a.solve(inst, {**a.tolerance_settings(1e-9), **a.time_limit_settings(30)})
         assert res.status == "optimal", (name, res.raw_status, res.message)
 
 

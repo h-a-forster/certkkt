@@ -85,7 +85,9 @@ only the convention, never the values:
 `tests/test_solvers.py` checks every adapter's convention by exact certification on a
 boxed QP, the same QP in conic form and an SOCP. Tolerance requests (section 5.4) map to
 Clarabel `tol_gap_abs = tol_gap_rel = tol_feas`; SCS and OSQP `eps_abs = eps_rel`; ECOS
-`feastol = abstol = reltol`; HiGHS `primal_ = dual_feasibility_tolerance`. Unknown settings
+`feastol = abstol = reltol`; HiGHS `primal_ = dual_feasibility_tolerance = kkt_tolerance =
+ipm_optimality_tolerance` (`kkt_tolerance` sets every feasibility and optimality measure,
+including the gap). Unknown settings
 are errors, not ignored.
 
 ## 3. Certification (`certify.py`)

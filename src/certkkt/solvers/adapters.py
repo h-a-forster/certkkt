@@ -318,7 +318,14 @@ class HiGHSAdapter(Adapter):
         return {"time_limit": float(seconds)}
 
     def tolerance_settings(self, tol: float) -> dict[str, Any]:
-        return {"primal_feasibility_tolerance": tol, "dual_feasibility_tolerance": tol}
+        # kkt_tolerance covers every feasibility and optimality measure once it differs
+        # from its default; the IPM's gap tolerance has its own (tighter) default.
+        return {
+            "primal_feasibility_tolerance": tol,
+            "dual_feasibility_tolerance": tol,
+            "kkt_tolerance": tol,
+            "ipm_optimality_tolerance": tol,
+        }
 
     def _solve(self, inst: Instance, settings: dict[str, Any]) -> SolverResult:
         highspy = self._import()

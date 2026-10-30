@@ -23,5 +23,6 @@ certkkt is a local verification tool. It needs no credentials.
 - **Solvers run in-process.** Adapters call Clarabel, SCS, OSQP, ECOS and HiGHS from
   your environment. Install them from sources you trust.
 - **Network access** happens only in `certkkt fetch`, only to the three hosts listed in
-  `src/certkkt/datasets.py`, with timeouts, a download cap and SHA-256 verification.
+  `src/certkkt/datasets.py` (redirects elsewhere are refused), with timeouts, a download
+  cap and SHA-256 verification.
 - **Study workers** are local subprocesses started with `multiprocessing` (spawn).

@@ -179,6 +179,20 @@ def test_fetch_refuses_a_changed_unpinned_file(data_root):
     fetch("french", data_root, names={name}, log=print)  # the new snapshot is now recorded
 
 
+def test_downloads_follow_redirects_only_to_source_hosts():
+    import urllib.error
+    import urllib.request
+
+    from certkkt.datasets import SOURCES, _SourceHostsOnly
+
+    req = urllib.request.Request(SOURCES["mm"] + "QPDATA1.ZIP")
+    redirect = _SourceHostsOnly().redirect_request
+    assert redirect(req, None, 302, "Found", {}, SOURCES["cblib"] + "x").full_url.endswith("x")
+    for bad in ("https://example.com/QPDATA1.ZIP", "http://www.doc.ic.ac.uk/~im/QPDATA1.ZIP"):
+        with pytest.raises(urllib.error.URLError):
+            redirect(req, None, 302, "Found", {}, bad)
+
+
 def test_manifest_records_input_file_hashes(tmp_path, data_root):
     from certkkt.datasets import sha256_file
 

@@ -13,18 +13,37 @@ from __future__ import annotations
 import hashlib
 import tempfile
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-#: Download sources (only these hosts are ever contacted).
+#: Download sources (only these hosts are ever contacted, redirects included).
 SOURCES = {
     "mm": "https://www.doc.ic.ac.uk/~im/",
     "cblib": "https://cblib.zib.de/download/all/",
     "french": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/",
 }
+_HOSTS = frozenset(urllib.parse.urlsplit(u).hostname for u in SOURCES.values())
+
+
+class _SourceHostsOnly(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to https on one of the SOURCES hosts."""
+
+    def redirect_request(
+        self, req: urllib.request.Request, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> urllib.request.Request | None:
+        parts = urllib.parse.urlsplit(newurl)
+        if parts.scheme != "https" or parts.hostname not in _HOSTS:
+            raise urllib.error.URLError(f"refusing redirect to {newurl!r}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_SourceHostsOnly)
 
 #: Maros-Meszaros QP test set (138 problems in three archives).
 MM_ARCHIVES = {
@@ -172,7 +191,7 @@ def fetch(
         with tempfile.NamedTemporaryFile(dir=dest.parent, delete=False, suffix=".part") as tmp:
             tmp_path = Path(tmp.name)
             try:
-                with urllib.request.urlopen(rf.url, timeout=timeout) as resp:  # noqa: S310
+                with _OPENER.open(rf.url, timeout=timeout) as resp:
                     for chunk in iter(lambda: resp.read(1 << 20), b""):
                         total += len(chunk)
                         if total > MAX_TOTAL_BYTES:

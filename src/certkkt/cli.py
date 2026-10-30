@@ -82,9 +82,10 @@ def cmd_solve(args: argparse.Namespace) -> int:
             raise SystemExit(f"--set expects key=value, got {kv!r}")
         settings[k] = _literal(v)
     res = adapter.solve(inst, settings)
+    took = "" if res.wall_time is None else f" time={res.wall_time:.2f}s"
     print(
         f"{res.solver} {res.version}: {res.status} ({res.raw_status}) "
-        f"objective={res.objective} time={res.wall_time:.2f}s",
+        f"objective={res.objective}{took}",
         file=sys.stderr,
     )
     if not res.has_solution:

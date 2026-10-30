@@ -74,6 +74,20 @@ def test_solve_command(lp_file, tmp_path, capsys):
     assert "best after repair" in capsys.readouterr().out
 
 
+@pytest.mark.solver
+def test_solve_with_a_solver_that_cannot_take_the_problem(tmp_path, capsys):
+    # OSQP has no second-order cones: an "unsupported" result has no timing and must be
+    # reported, not crash the CLI.
+    pytest.importorskip("osqp")
+    f = tmp_path / "disc.cbf"
+    f.write_text(
+        "VER\n3\nOBJSENSE\nMIN\nVAR\n3 1\nQ 3\nOBJACOORD\n1\n1 -1\n"
+        "CON\n1 1\nL= 1\nACOORD\n1\n0 0 1\nBCOORD\n1\n0 -1\n"
+    )
+    assert main(["solve", str(f), "--solver", "osqp"]) == 1
+    assert "unsupported" in capsys.readouterr().err
+
+
 def test_solvers_and_version(capsys):
     assert main(["solvers"]) == 0
     assert "clarabel" in capsys.readouterr().out

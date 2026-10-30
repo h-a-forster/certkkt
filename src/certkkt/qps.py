@@ -1,4 +1,4 @@
-"""Reader for MPS and QPS files (free format), keeping every number exact.
+"""Reader for MPS and QPS files (free format, else fixed format), keeping every number exact.
 
 Numbers are parsed as exact decimals (``"0.1"`` is ``1/10``), so the certified problem is
 the one written in the file, not its binary rounding. Supported sections: NAME, OBJSENSE,
@@ -62,6 +62,30 @@ def read_qps(path: str | Path, *, exact_decimals: bool = True) -> BoxedQP:
 
 
 def parse_qps(text: str, default_name: str = "problem", *, exact_decimals: bool = True) -> BoxedQP:
+    """Parse free-format MPS/QPS text; if that fails, retry it as fixed-format MPS, whose
+    names may contain spaces (QFORPLAN has rows such as ``DEDO3 1R``)."""
+    try:
+        return _parse(text, default_name, exact_decimals, fixed=False)
+    except FormatError as exc:
+        try:
+            return _parse(text, default_name, exact_decimals, fixed=True)
+        except FormatError:
+            raise exc from None
+
+
+#: Fixed-format MPS data fields (0-based slices of columns 2-3, 5-12, 15-22, 25-36, 40-47,
+#: 50-61).
+_FIXED_FIELDS = (
+    slice(1, 3),
+    slice(4, 12),
+    slice(14, 22),
+    slice(24, 36),
+    slice(39, 47),
+    slice(49, 61),
+)
+
+
+def _parse(text: str, default_name: str, exact_decimals: bool, *, fixed: bool) -> BoxedQP:
     name = default_name
     sense = 1
     obj_row: str | None = None
@@ -104,6 +128,8 @@ def parse_qps(text: str, default_name: str = "problem", *, exact_decimals: bool 
         if not stripped or stripped.startswith("*"):
             continue
         tokens = stripped.split()
+        if fixed and line[0].isspace():  # empty fields drop out, as in free format
+            tokens = [f for f in (line[sl].strip() for sl in _FIXED_FIELDS) if f]
         if not line[0].isspace():
             head = tokens[0].upper()
             if head not in _SECTIONS:

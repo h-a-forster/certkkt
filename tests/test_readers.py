@@ -58,6 +58,38 @@ def test_maximisation_is_negated():
     assert bx.P.row_dicts()[0][0] == -2
 
 
+def test_fixed_format_names_may_contain_spaces():
+    # Fixed-format MPS fields sit in columns 2-3, 5-12, 15-22, 25-36, 40-47 and 50-61, so a
+    # name may contain spaces (QFORPLAN has rows such as "DEDO3 1R").
+    def data(*f):
+        return "    " + "".join(f"{v:<{w}}" for v, w in zip(f, (10, 10, 15, 10, 12), strict=False))
+
+    text = "\n".join(
+        [
+            "NAME          SPACED",
+            "ROWS",
+            " N  COST",
+            " G  LIM 1",
+            " E  MY EQN",
+            "COLUMNS",
+            data("X 1", "COST", "1.0", "LIM 1", "1.0"),
+            data("X 1", "MY EQN", "1.0"),
+            data("Y 1", "COST", "2.0", "MY EQN", "-1.0"),
+            "RHS",
+            data("RHS", "LIM 1", "1.0", "MY EQN", "0.5"),
+            "BOUNDS",
+            " UP BND       Y 1       4.0",
+            "QUADOBJ",
+            data("X 1", "X 1", "2.0"),
+            "ENDATA",
+        ]
+    )
+    bx = parse_qps(text)
+    assert bx.row_names == ["LIM 1", "MY EQN"] and bx.col_names == ["X 1", "Y 1"]
+    assert bx.A.row_dicts() == [{0: 1}, {0: 1, 1: -1}] and bx.c == [1, 2]
+    assert bx.rl == [1, Q(1, 2)] and bx.ub == [None, 4] and bx.P.row_dicts()[0] == {0: 2}
+
+
 @pytest.mark.parametrize(
     "edit, message",
     [

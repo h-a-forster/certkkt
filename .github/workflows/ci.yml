@@ -1,0 +1,50 @@
+name: CI
+
+# Private-repo minutes are metered: run on pull requests and on demand only.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint and test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+
+      - name: Install (all solvers)
+        run: uv sync --locked --all-extras --group dev
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Test
+        run: uv run pytest -m "not slow"
+
+      - name: Test with the pure-Python rational backend
+        env:
+          CERTKKT_RATIONAL: fraction
+        run: uv run pytest -m "not slow and not solver" tests/test_rational.py tests/test_certify.py tests/test_readers.py
+
+      - name: CLI smoke
+        run: uv run certkkt solvers

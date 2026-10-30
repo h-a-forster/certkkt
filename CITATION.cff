@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: "If you use certkkt, please cite it as below."
+title: certkkt
+abstract: >-
+  Exact rational-arithmetic optimality certificates for LP, QP and SOCP solutions:
+  certify or refute primal and dual feasibility, cone membership, duality gap and
+  complementarity of a solver's floating-point output, and repair near-optimal points
+  into exact certificates.
+type: software
+authors:
+  - alias: h-a-forster
+repository-code: "https://github.com/h-a-forster/certkkt"
+license: MIT
+version: 0.1.0
+date-released: "2026-10-30"
+keywords:
+  - convex optimization
+  - second-order cone programming
+  - quadratic programming
+  - exact arithmetic
+  - verification
+  - KKT conditions
+references:
+  - type: article
+    authors:
+      - family-names: Cheung
+        given-names: Kevin K. H.
+      - family-names: Gleixner
+        given-names: Ambros
+      - family-names: Steffy
+        given-names: Daniel E.
+    title: "Verifying Integer Programming Results"
+    year: 2017
+    notes: "IPCO 2017; the VIPR certificate format"
+  - type: article
+    authors:
+      - family-names: Maros
+        given-names: Istvan
+      - family-names: Meszaros
+        given-names: Csaba
+    title: "A repository of convex quadratic programming problems"
+    year: 1999
+    journal: "Optimization Methods and Software"
+  - type: article
+    authors:
+      - family-names: Friberg
+        given-names: Henrik A.
+    title: "CBLIB 2014: a benchmark library for conic mixed-integer and continuous optimization"
+    year: 2016
+    journal: "Mathematical Programming Computation"

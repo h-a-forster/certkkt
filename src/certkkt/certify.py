@@ -94,10 +94,14 @@ class Certificate:
         mr = self.max_rel
         return mr is not None and mr <= to_q(eps)
 
-    def rank(self) -> tuple[int, float]:
-        """Sort key: lower is better (level first, then the certified relative gap)."""
+    def rank(self) -> tuple[int, float, int]:
+        """Sort key, lower is better: optimal, then bounded, then everything else by the
+        largest relative residual (a one-sided exact certificate with a huge gap is valid
+        but says less than a near-feasible pair), ties broken by level."""
         mr = self.max_rel
-        return (LEVELS.index(self.level), q_float_up(mr) if mr is not None else math.inf)
+        tier = {"optimal": 0, "bounded": 1}.get(self.level, 2)
+        level = LEVELS.index(self.level)
+        return (tier, q_float_up(mr) if mr is not None else math.inf, level)
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-ready dict: rationals become floats rounded up (rigorous upper bounds),

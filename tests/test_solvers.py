@@ -89,12 +89,12 @@ def test_adapter_convention(name, make):
     assert best.level in ("optimal", "bounded"), best.to_dict()
 
 
-def test_tolerance_settings_are_accepted():
+def test_tolerance_and_time_limit_settings_are_accepted():
     for name in sorted(ADAPTERS):
         a = get_adapter(name)
         if not a.available() or a.unsupported_reason(socp()):
             continue
-        res = a.solve(socp(), a.tolerance_settings(1e-9))
+        res = a.solve(socp(), {**a.tolerance_settings(1e-9), **a.time_limit_settings(30)})
         assert res.status == "optimal", (name, res.raw_status, res.message)
 
 
@@ -125,3 +125,21 @@ def test_cvxpy_problem_round_trip():
     assert np.isclose(res.objective, prob.value, rtol=1e-6, atol=1e-7)
     cert = certify(inst.problem, res.x, res.z)
     assert cert.certified_at("1e-6")
+
+
+@pytest.mark.parametrize("name", ["clarabel", "ecos"])
+def test_interior_repair_certifies_a_portfolio_socp(name):
+    # Both cones are active at the optimum and the turnover cone's head is a constant,
+    # so the interior push must shrink tails, not only raise heads.
+    from test_study import french_csv
+
+    from certkkt.portfolio import min_variance_socp, parse_french_csv
+
+    a = _available(name)
+    window = parse_french_csv(french_csv()).window(202512, 60)
+    inst = Instance(problem=min_variance_socp(window, "1.3", "0.05"))
+    res = a.solve(inst)
+    assert res.status == "optimal"
+    best = repair(inst.problem, res.x, res.z).best
+    assert best.level == "bounded", best.to_dict()
+    assert best.max_rel < 1e-6

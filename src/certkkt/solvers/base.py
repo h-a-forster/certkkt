@@ -118,6 +118,10 @@ class Adapter(ABC):
         """Settings that request accuracy ``tol`` from this solver."""
         raise NotImplementedError
 
+    def time_limit_settings(self, seconds: float) -> dict[str, Any]:
+        """Settings that cap the solver's wall-clock time (empty if it has no such option)."""
+        return {}
+
     def solve(self, inst: Instance, settings: dict[str, Any] | None = None) -> SolverResult:
         settings = dict(settings or {})
         reason = self.unsupported_reason(inst)

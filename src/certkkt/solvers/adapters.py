@@ -43,6 +43,9 @@ class ClarabelAdapter(Adapter):
 
         return clarabel
 
+    def time_limit_settings(self, seconds: float) -> dict[str, Any]:
+        return {"time_limit": float(seconds)}
+
     def tolerance_settings(self, tol: float) -> dict[str, Any]:
         return {"tol_gap_abs": tol, "tol_gap_rel": tol, "tol_feas": tol}
 
@@ -103,6 +106,9 @@ class SCSAdapter(Adapter):
 
         return scs
 
+    def time_limit_settings(self, seconds: float) -> dict[str, Any]:
+        return {"time_limit_secs": float(seconds)}
+
     def tolerance_settings(self, tol: float) -> dict[str, Any]:
         return {"eps_abs": tol, "eps_rel": tol}
 
@@ -160,6 +166,9 @@ class OSQPAdapter(Adapter):
         import osqp
 
         return osqp
+
+    def time_limit_settings(self, seconds: float) -> dict[str, Any]:
+        return {"time_limit": float(seconds)}
 
     def tolerance_settings(self, tol: float) -> dict[str, Any]:
         return {"eps_abs": tol, "eps_rel": tol}
@@ -299,6 +308,9 @@ class HiGHSAdapter(Adapter):
         import highspy
 
         return highspy
+
+    def time_limit_settings(self, seconds: float) -> dict[str, Any]:
+        return {"time_limit": float(seconds)}
 
     def tolerance_settings(self, tol: float) -> dict[str, Any]:
         return {"primal_feasibility_tolerance": tol, "dual_feasibility_tolerance": tol}

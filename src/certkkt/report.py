@@ -157,7 +157,8 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
                 ok = rep = "-"
             else:
                 ok = fmt_share(sum(asis_ok(r, tol) for r in recs), n)
-                rep = fmt_share(sum(repaired_ok(r, tol) for r in recs), n)
+                repaired = any("best" in r for r in recs)
+                rep = fmt_share(sum(repaired_ok(r, tol) for r in recs), n) if repaired else "-"
             lines.append(
                 f"| {suite} | {solver} | {tol} | {n} | {_q3(mr)} | {_q3(gaps)} | {ok} | {rep} |"
             )

@@ -97,7 +97,8 @@ def test_study_checkpoints_and_resumes(tmp_path, data_root):
     assert n2 == 2
     keys = [r["key"] for r in study.read_records(run / "units.jsonl")]
     assert len(keys) == len(set(keys)) == 5
-    assert json.loads((run / "manifest.json").read_text())["profile"] == "quick"
+    calls = json.loads((run / "manifest.json").read_text())["calls"]
+    assert [c["profile"] for c in calls] == ["quick", "quick"]
     text = markdown(study.read_records(run / "units.jsonl"))
     assert "| portfolio | clarabel |" in text
     assert summarise(study.read_records(run / "units.jsonl"))

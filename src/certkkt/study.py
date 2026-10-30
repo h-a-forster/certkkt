@@ -43,12 +43,18 @@ TOLERANCES = ("default", "1e-4", "1e-6", "1e-8")
 class Limits:
     """Per-unit limits: solver wall-clock limit (where the solver has one), total repair
     time, and the hard timeout after which the worker is killed. ``certify_max_nnz``
-    skips exact work on larger instances (status and float residuals only)."""
+    skips exact work on larger instances (status and float residuals only), and
+    ``max_file_bytes`` skips instances whose file is too large to parse into exact
+    rationals in memory."""
 
     solver_seconds: float = 60.0
     repair_seconds: float = 30.0
     hard_seconds: float = 300.0
     certify_max_nnz: int = 2_000_000
+    #: skip (without loading) instance files larger than this (compressed bytes)
+    max_file_bytes: int | None = None
+    #: run the repairs on tolerance-sweep units too (not only on tol = "default")
+    repair_sweep: bool = True
 
 
 @dataclass(frozen=True)
@@ -97,10 +103,12 @@ PROFILES = {
         portfolio=None,
         mittelmann=tuple(),  # filled below: every downloadable instance
         limits={
-            "mm": Limits(600.0, 120.0, 1800.0),
-            "cblib": Limits(600.0, 120.0, 1800.0),
-            "portfolio": Limits(600.0, 120.0, 1800.0),
-            "mittelmann": Limits(3600.0, 300.0, 7200.0, certify_max_nnz=8_000_000),
+            "mm": Limits(600.0, 60.0, 1200.0, repair_sweep=False),
+            "cblib": Limits(600.0, 60.0, 1200.0, repair_sweep=False),
+            "portfolio": Limits(600.0, 60.0, 1200.0),
+            "mittelmann": Limits(
+                3600.0, 300.0, 7200.0, certify_max_nnz=8_000_000, max_file_bytes=30_000_000
+            ),
         },
     ),
 }
@@ -255,6 +263,9 @@ def run_unit(unit: Unit, inst: Any, limits: Limits, timings: dict[str, float]) -
     cert = certify(prob, x, z)
     timings["certify"] = time.perf_counter() - t0
     rec["as_is"] = cert.to_dict()
+    if unit.tol != "default" and not limits.repair_sweep:
+        rec["outcome"] = "certified_as_is"
+        return rec
     t0 = time.perf_counter()
     out = repair(prob, np.asarray(x), z, time_budget=limits.repair_seconds)
     timings["repair"] = time.perf_counter() - t0
@@ -281,16 +292,27 @@ def _worker(conn: Connection, data_root: str) -> None:
         t0 = time.perf_counter()
         inst = None
         load_error = None
-        try:
-            inst = load_unit_instance(suite, name, root)
-        except Exception as exc:  # malformed or unsupported instance: record and go on
-            load_error = f"{type(exc).__name__}: {exc}"[:500]
+        outcome = "load_error"
+        path = root / "raw" / "cblib" / f"{name}.cbf.gz"
+        if (
+            limits.max_file_bytes is not None
+            and suite in ("cblib", "mittelmann")
+            and path.exists()
+            and path.stat().st_size > limits.max_file_bytes
+        ):
+            outcome = "skipped_too_large"
+            load_error = f"{path.stat().st_size} bytes > {limits.max_file_bytes}"
+        else:
+            try:
+                inst = load_unit_instance(suite, name, root)
+            except Exception as exc:  # malformed or unsupported instance: record, go on
+                load_error = f"{type(exc).__name__}: {exc}"[:500]
         load_s = time.perf_counter() - t0
         for ud in unit_dicts:
             unit = Unit(**ud)
             timings: dict[str, float] = {"load": load_s}
             if inst is None:
-                rec = {"key": unit.key, **ud, "outcome": "load_error", "error": load_error}
+                rec = {"key": unit.key, **ud, "outcome": outcome, "error": load_error}
             else:
                 try:
                     rec = run_unit(unit, inst, limits, timings)
@@ -406,21 +428,20 @@ def run_study(
     remaining = [u for u in units if u.key not in done]
     todo = remaining if max_units is None else remaining[:max_units]
     sink = _Sink(run_dir, len(units), len(units) - len(remaining), echo)
+    # One manifest entry per call: versions can differ between resumed calls.
     manifest = run_dir / "manifest.json"
-    if not manifest.exists():
-        manifest.write_text(
-            json.dumps(
-                {
-                    "profile": profile_name,
-                    "suites": list(suites),
-                    "versions": versions(),
-                    "solvers": _solver_versions(),
-                    "platform": platform.platform(terse=True),
-                    "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                },
-                indent=2,
-            )
-        )
+    calls = json.loads(manifest.read_text())["calls"] if manifest.exists() else []
+    calls.append(
+        {
+            "profile": profile_name,
+            "suites": list(suites),
+            "versions": versions(),
+            "solvers": _solver_versions(),
+            "platform": platform.platform(terse=True),
+            "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+    )
+    manifest.write_text(json.dumps({"calls": calls}, indent=2))
     sink.log(
         f"profile={profile_name} suites={','.join(suites)} units={len(units)} "
         f"done={len(units) - len(remaining)} todo={len(todo)} workers={workers}"

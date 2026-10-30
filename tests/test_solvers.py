@@ -99,6 +99,24 @@ def test_tolerance_and_time_limit_settings_are_accepted():
         assert res.status == "optimal", (name, res.raw_status, res.message)
 
 
+@pytest.mark.parametrize("tol", [1e-2, 1e-7])
+def test_highs_tolerance_request_reaches_the_ipm_gap(tol):
+    # The feasibility tolerances alone leave HiGHS's IPM at its own gap tolerance (1e-8).
+    # kkt_tolerance moves it, but only away from its own default 1e-7, where
+    # ipm_optimality_tolerance is needed.
+    a = _available("highs")
+    A = [[1, 4, 7, 3, 6], [6, 2, 5, 1, 4], [4, 7, 3, 6, 2], [2, 5, 1, 4, 7], [7, 3, 6, 2, 5]]
+    neg = [[-int(i == j) for j in range(5)] for i in range(5)]
+    p = make_problem(
+        A=A + neg, b=[50] * 5 + [0] * 5, cones=[("nonneg", 10)], q=[-1, -4, -2, -5, -3]
+    )
+    ipm = {"solver": "ipm", "run_crossover": "off"}
+    tight = a.solve(Instance(problem=p), ipm)
+    loose = a.solve(Instance(problem=p), {**a.tolerance_settings(tol), **ipm})
+    assert tight.status == loose.status == "optimal"
+    assert loose.iterations < tight.iterations
+
+
 def test_unknown_setting_is_an_error_not_ignored():
     a = _available("clarabel")
     res = a.solve(socp(), {"no_such_setting": 1})

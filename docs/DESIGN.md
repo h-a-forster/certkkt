@@ -87,11 +87,15 @@ only the convention, never the values:
 boxed QP, the same QP in conic form and an SOCP. Tolerance requests (section 5.4) map to
 Clarabel `tol_gap_abs = tol_gap_rel = tol_feas`; SCS and OSQP `eps_abs = eps_rel`; ECOS
 `feastol = abstol = reltol`; HiGHS `primal_ = dual_feasibility_tolerance = kkt_tolerance =
-ipm_optimality_tolerance`. The two optimality options are set for like-for-like requests, but
-no effect of them is measured: on the 40 smallest Maros-Meszaros QPs, 79 of 80 solutions at
-1e-4 and 1e-8 were bit-identical with and without them (HiGHS's QP solver need not read
-them). The feasibility tolerances do matter there: 6 of the 40 solutions differ across the
-default, 1e-4 and 1e-8. Unknown settings are errors, not ignored.
+ipm_optimality_tolerance`. The two optimality options move the gap test of HiGHS's IPM
+(`kkt_tolerance` also PDLP's) on LPs: `tests/test_solvers.py` checks that a 1e-2 or 1e-7
+request stops the IPM earlier, `kkt_tolerance` acting only away from its own default 1e-7
+and `ipm_optimality_tolerance` (default 1e-8) at it. On QPs they change nothing measured:
+`scripts/highs_tolerances.py` finds all 160 solves of the 40 smallest Maros-Meszaros QPs at
+1e-1, 1e-2, 1e-4 and 1e-8 identical in status and bit-identical in solution with and without
+them (QSHARE1B ends in a solve error at 1e-4 and 1e-8 either way). The feasibility
+tolerances do matter there: 6 of the 40 solutions differ across the default, 1e-4 and 1e-8.
+Unknown settings are errors, not ignored.
 
 ## 3. Certification (`certify.py`)
 

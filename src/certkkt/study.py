@@ -498,8 +498,11 @@ def run_study(
 
 
 def _input_files(units: list[Unit], data_root: Path) -> dict[str, dict[str, Any]]:
-    """SHA-256 and size of each data file the units read (the French zips have no pinned
-    checksum and change upstream, so the manifest records which snapshot a call used)."""
+    """SHA-256 and size of the data files behind the units, as found under ``data_root``:
+    every Maros-Meszaros archive and every French zip once any unit of that suite is
+    listed (a superset of what the units read), and each CBLIB file a unit names; missing
+    files are left out. The French zips have no pinned checksum and change upstream, so
+    the manifest records which snapshot a call used."""
     from certkkt.datasets import FRENCH_FILES, MM_ARCHIVES, sha256_file
 
     rels: set[str] = set()

@@ -69,9 +69,12 @@ variables `SUITES`, `WORKERS`, `RUN_DIR`, `MAX_UNITS` and `LOG` restrict or redi
 
 ## Status and next steps
 
-Status (2026-10-30): v0.1.0. Library, CLI, plugin and adapters done and tested (138
+Status (2026-10-30): v0.1.0. Library, CLI, plugin and adapters done and tested (140
 tests, all passing locally; the CI workflow has not run on GitHub yet); quick study run
-and reported in REPORT.md; full study not yet run.
+and reported in REPORT.md. The full study was started and stopped by owner decision at
+348/3093 units (all Maros-Meszaros; 28 hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L
+and CVXQP3_L) after 6.4 h, its own projection then about 50 more hours
+(`runs/full/progress.log`); it is not reported.
 
 Full-profile time estimate (3 workers), from measured units: small Maros-Meszaros units
 about 6 s, 100 kB-1 MB files 2-28 s, larger files about 90 s (repairs overshoot their
@@ -79,12 +82,14 @@ about 6 s, 100 kB-1 MB files 2-28 s, larger files about 90 s (repairs overshoot 
 work; CBLIB default units 60-100 s; Mittelmann units 0.5-1 h each (chainsing-50000-3:
 load 11 s, Clarabel 17 s, certify 8 s, then up to 300 s of repairs; SCS may use its
 3600 s limit). About 6 hours in total (range 4-9 h), the Mittelmann suite being the
-least certain part. Memory: db-joint-soerensen (6M nonzeros) needs several GB per
-worker while parsed as exact rationals.
+least certain part. That estimate did not hold (see Status): re-estimate before a
+rerun, which resumes from `runs/full`. Memory: db-joint-soerensen (6M nonzeros) needs
+several GB per worker while parsed as exact rationals.
 
 Next steps, in order:
 
-1. Run the full profile (long run) and fold `runs/full/report.md` into REPORT.md.
+1. Cut the full profile's run time (the large Maros-Meszaros units time out), finish it
+   and fold `runs/full/report.md` into REPORT.md.
 2. Mittelmann SOCP: obtain the 11 instances that are not on CBLIB's download list (fir*,
    dsNRL, wbNRL) and a float-only path for beam30 (64M nonzeros) to cover all 18.
 3. Repair speed: exact elimination in pure Python dominates repair time above ~10^4
@@ -93,8 +98,3 @@ Next steps, in order:
    x by O(1) or more; a float rank-revealing basis choice should fix most cases.
 5. Farkas certificates for infeasibility/unboundedness claims; PSD cone (where the dual
    membership certificates of Lee, Papp and Varga become necessary).
-6. HiGHS tolerance (commit 2a69522): the optimality options showed no effect on the QP
-   suite; find a behavioural test or revert them.
-7. `_input_files` docstring (study.py) says it hashes each data file the units read, but
-   it records every French zip (and every Maros-Meszaros archive) present once any unit
-   of that suite runs: fix the wording or the code.

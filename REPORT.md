@@ -1,7 +1,8 @@
 # certkkt study: report (quick profile)
 
-Date: 2026-10-30. Profile: `quick` (DESIGN section 5.4). The full profile has not been
-run yet; its launcher and time estimate are in AGENTS.md. Every number below comes from
+Date: 2026-10-30. Profile: `quick` (DESIGN section 5.4). The full profile was started
+and stopped by owner decision at 348 of 3093 units; nothing here comes from it (see
+AGENTS.md). Every number below comes from
 [docs/results/quick-units.jsonl](docs/results/quick-units.jsonl) (one record per unit) via
 `certkkt study report`; the generated tables are in
 [docs/results/quick.md](docs/results/quick.md).

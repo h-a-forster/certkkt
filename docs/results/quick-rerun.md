@@ -1,7 +1,7 @@
 # Quick study rerun, 2026-11-06
 
 `certkkt study run --profile quick --suite mm --suite cblib --suite portfolio --workers 4`
-at commit e5eefeb on the same machine, with the versions of `quick-manifest.json` and the
+at commit bada8e5 on the same machine, with the versions of `quick-manifest.json` and the
 input files of `quick-french-SHA256SUMS`: 5 min 46 s wall in one call. Compared record by
 record with `quick-units.jsonl`:
 

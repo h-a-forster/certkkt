@@ -63,9 +63,10 @@ uv run certkkt study run --profile quick --suite portfolio --suite cblib --worke
 uv run certkkt study report --profile quick --out docs/results/quick.md --json docs/results/quick.json
 ```
 
-The full profile runs for hours: `bash scripts/run_study.sh` (fetch, three-attempt
-retry loop, log in `runs/longrun.log`, report in `runs/full/report.md`). Environment
-variables `SUITES`, `WORKERS`, `RUN_DIR`, `MAX_UNITS` and `LOG` restrict or redirect it.
+Do not launch the full profile as designed (see Status). `bash scripts/run_study.sh` is
+its launcher (fetch, three-attempt retry loop, log in `runs/longrun.log`, report in
+`runs/full/report.md`); environment variables `SUITES`, `WORKERS`, `RUN_DIR`, `MAX_UNITS`
+and `LOG` restrict or redirect it, which is the supported use until the redesign.
 
 ## Status
 
@@ -76,10 +77,16 @@ study was started and stopped by owner decision at 348/3093 units (all Maros-Mes
 hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, its own
 projection then about 50 more hours (`runs/full/progress.log`); it is not reported.
 
-Those timeouts came from `psd_check`, whose budget then counted plain updates while the
-exact coefficients grew. It now counts words and ends "unknown" in about a minute (DESIGN
-3.3). `runs/full` still holds the 28 timeout records, and a resume skips recorded units:
-drop those records first.
+The 3093-unit full profile is not runnable as designed, and finishing it is not the plan:
+it needs a redesign (size cap and repair budget, see [backlog.md](backlog.md)), not a
+resume. Those timeouts came from `psd_check`, whose budget then counted plain updates
+while the exact coefficients grew. It now counts words and ends "unknown" in about a
+minute (DESIGN 3.3). That removes about half of the run's worker time (28 x 1200 s of
+about 19 worker-hours), so the 50-hour figure is stale, but no new figure has been
+measured and the rest of the case stands: the run had reached only 23 of the 138
+Maros-Meszaros problems, and the costs below remain. On the large instances the budgets
+would stop the units, so their results would measure the budget, not the solvers.
+`runs/full` predates the fix and any rerun should start from an empty run directory.
 
 Full-profile cost, from measured units: small Maros-Meszaros units about 6 s, 100 kB-1 MB
 files 2-28 s, larger files about 90 s (repairs overshoot their 60 s budget; LISWET3 94 s,
@@ -87,6 +94,6 @@ AUG2DQP 88 s), but HiGHS spends its whole 600 s limit and more on the CONT, BOYD
 AUG2D problems (up to 779 s); EXDATA (2.3M nonzeros) 23 s load and no exact work; CBLIB
 default units 60-100 s; Mittelmann units 0.5-1 h each (chainsing-50000-3: load 11 s,
 Clarabel 17 s, certify 8 s, then up to 300 s of repairs; SCS may use its 3600 s limit).
-The earlier estimate of about 6 hours did not hold: re-estimate before a rerun. Memory:
+The earlier estimate of about 6 hours did not hold. Memory:
 db-joint-soerensen (6M nonzeros) needs several GB per worker while parsed as exact
 rationals.

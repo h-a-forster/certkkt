@@ -39,21 +39,25 @@ solver; nominal 95% Wilson intervals, see section 6):
 | OSQP | 33/40 | 3/40 = 8% [3, 20] | 0/40 = 0% [0, 9] | 21/40 = 53% [37, 67] (1e-3) | 19/40 = 48% [33, 63] |
 
 "Certified at eps" means every exact relative residual (primal, dual, gap; DESIGN 3.2)
-is at most eps. "Own default tol" applies that test at the solver's documented default
-tolerance, in certkkt's measure (not the solver's stopping criterion). "Exact optimum"
-means the repairs found an exactly feasible primal-dual pair with gap exactly zero (an
-exact rational optimum).
+is at most eps. "Own default tol" applies that test at the value of the solver's
+documented default tolerance, in certkkt's measure. It is a yardstick, not the solver's
+stopping criterion, so a miss does not by itself mean the solver broke its tolerance.
+"Exact optimum" means the repairs found an exactly feasible primal-dual pair with gap
+exactly zero (an exact rational optimum).
 
 1. **Status "optimal" says little at tight thresholds.** Among units whose solver
    reported optimal, the exact residuals exceed 1e-6 for 3/40 Clarabel, 16/39 HiGHS,
-   24/40 SCS and 30/33 OSQP units. Even at each solver's own default tolerance, 10/40
-   Clarabel (1e-8), 25/39 HiGHS (1e-7), 10/40 SCS (1e-4) and 12/33 OSQP (1e-3) of these
-   units miss in certkkt's measure. Loose defaults plausibly account for much of the
-   OSQP and SCS gap at 1e-6, but the quick profile runs Maros-Meszaros at defaults only,
-   so this is a hypothesis for the full profile's tolerance sweep to test. Tolerance does
-   not explain HiGHS: its QP output misses its own 1e-7 on 25/39 units claiming optimal,
-   with the gap (13) or the dual residual (12) as the binding measure. Over all default
-   units failing 1e-6, the binding measure is the dual residual (45) or the gap (32) far
+   24/40 SCS and 30/33 OSQP units. Even at the value of each solver's default tolerance,
+   10/40 Clarabel (1e-8), 25/39 HiGHS (1e-7), 10/40 SCS (1e-4) and 12/33 OSQP (1e-3) of
+   these units exceed it in certkkt's measure. Loose defaults plausibly account for much
+   of the OSQP and SCS gap at 1e-6, but the quick profile runs Maros-Meszaros at defaults
+   only, so this is a hypothesis for a tolerance sweep to test. A loose default does not explain
+   HiGHS, whose default feasibility tolerances are 1e-7: its QP output exceeds 1e-7 in
+   certkkt's measure on 25/39 units claiming optimal, with the gap (13) or the dual
+   residual (12) as the binding measure and the primal residual at most 2e-11. This does
+   not show HiGHS missing its own tolerance: 1e-7 is tested in HiGHS's measures, not
+   certkkt's, and the options that set a gap target change nothing on these QPs (DESIGN
+   2). Over all default units failing 1e-6, the binding measure is the dual residual (45) or the gap (32) far
    more often than primal feasibility (11, 7 of them SCS).
 2. **Exact optima, paired by problem.** 29/40 problems reach an exact optimum from at
    least one solver (19/40 from all four; 11/40 from none), and every one of the 29 is
@@ -127,7 +131,7 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
   basic correction of that remainder is badly conditioned. The instance contains
   coefficients 0.5000000000015 next to 0.5, which plausibly makes nearly dependent
   equality rows exactly independent. A rank-revealing basis choice is the planned fix
-  (AGENTS.md, next steps).
+  ([backlog.md](backlog.md)).
 
 ## 5. Mittelmann SOCP benchmark: coverage and reproduction
 

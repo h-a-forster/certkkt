@@ -30,7 +30,7 @@ def _cert_lines(cert: Any) -> list[str]:
 
 
 def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Namespace) -> int:
-    from certkkt.certify import certify, first_meeting
+    from certkkt.certify import certify, first_certified, first_meeting
     from certkkt.repair import repair
 
     cert = certify(inst.problem, x, z)
@@ -39,7 +39,6 @@ def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Names
     if not args.no_repair:
         certs = repair(inst.problem, x, z, time_budget=args.time_budget).certificates
         best = certs[0]
-    final = best if best is not None and best.rank() < cert.rank() else cert
     if args.json:
         out = {"problem": inst.problem.summary(), "as_is": cert.to_dict()}
         if best is not None:
@@ -53,11 +52,11 @@ def _report(inst: Any, x: np.ndarray, z: np.ndarray | None, args: argparse.Names
             print("best after repair:")
             print("\n".join(_cert_lines(best)))
     failed = False
-    if args.require_eps is not None and not final.certified_at(args.require_eps):
+    if args.require_eps is not None and first_certified(certs, args.require_eps) is None:
         print(f"FAIL: not certified at eps={args.require_eps}", file=sys.stderr)
         failed = True
     if args.require_level is not None and first_meeting(certs, args.require_level) is None:
-        print(f"FAIL: level {final.level} does not meet {args.require_level}", file=sys.stderr)
+        print(f"FAIL: level {certs[0].level} does not meet {args.require_level}", file=sys.stderr)
         failed = True
     return 1 if failed else 0
 
@@ -68,9 +67,7 @@ def cmd_solve(args: argparse.Namespace) -> int:
 
     adapter = get_adapter(args.solver)
     if not adapter.available():
-        print(
-            f"{args.solver} is not installed (pip install certkkt[{args.solver}])", file=sys.stderr
-        )
+        print(f"{args.solver} is not installed (extra: certkkt[{args.solver}])", file=sys.stderr)
         return 2
     inst = load_instance(args.problem)
     settings: dict[str, Any] = {}
@@ -226,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument(
             "--require-level",
             choices=LEVELS,
-            help="exit 1 unless the best certificate is at least this strong",
+            help="exit 1 unless some certificate is at least this strong",
         )
 
     sp = sub.add_parser("solve", help="solve a problem file and certify the result")

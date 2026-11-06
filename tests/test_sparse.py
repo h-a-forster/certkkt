@@ -106,3 +106,15 @@ def test_psd_check():
     assert psd_check(indef).status == "not_psd"
     with pytest.raises(ValueError):
         psd_check(QMatrix.from_rows((2, 2), [{1: Q(1)}, {}]))
+
+
+def test_psd_budget_counts_coefficient_size():
+    # About 300 updates, each on numbers of hundreds of bits: plain updates fit the budget
+    # but take far longer than their count says, as on CVXQP1_L (over 20 minutes).
+    rng = random.Random(1)
+    n = 12
+    B = [[Q(rng.randint(-(10**60), 10**60)) for _ in range(n)] for _ in range(n)]
+    G = [[sum((B[t][i] * B[t][j] for t in range(n)), Q(0)) for j in range(n)] for i in range(n)]
+    M = QMatrix.from_rows((n, n), [dict(enumerate(row)) for row in G])
+    assert psd_check(M).is_psd
+    assert psd_check(M, budget=1000).status == "unknown"

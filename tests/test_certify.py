@@ -62,6 +62,8 @@ def test_dual_bound_needs_psd_objective():
     assert cert.psd == "not_psd"
     assert cert.level == "primal_feasible"
     assert any("semidefinite" in n for n in cert.notes)
+    # All residuals are 0, yet (0, 0) is a saddle point: it must not count as certified.
+    assert cert.max_rel == 0 and not cert.certified_at("1")
 
 
 def test_to_dict_handles_huge_rationals():
@@ -102,6 +104,15 @@ def test_repair_brackets_irrational_soc_optimum():
     assert best.dobj < 0 and best.dobj * best.dobj >= 2
     assert best.pobj >= 0 or best.pobj * best.pobj <= 2
     assert float(best.pobj - best.dobj) < 1e-6
+
+
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+@pytest.mark.parametrize("problem", [lp(), disc()], ids=["lp", "soc"])
+def test_repair_keeps_the_as_is_certificate_when_a_method_fails_numerically(problem):
+    # Huge floats overflow the float steps of the repairs (nan) and used to raise.
+    x, z = np.full(problem.n, 1e300), np.full(problem.m, 1e300)
+    out = repair(problem, x, z, time_budget=5)
+    assert out.by_method("as_is") is not None
 
 
 def test_repair_rejects_unknown_method():

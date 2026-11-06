@@ -33,8 +33,9 @@ def asis_rel(rec: dict[str, Any]) -> float | None:
 
 
 def asis_ok(rec: dict[str, Any], eps: str) -> bool:
+    """As :meth:`certkkt.certify.Certificate.certified_at` (not on a non-PSD objective)."""
     v = asis_rel(rec)
-    return v is not None and _le(v, eps)
+    return v is not None and rec["as_is"]["psd"] in ("zero", "psd") and _le(v, eps)
 
 
 def repaired_ok(rec: dict[str, Any], eps: str) -> bool:

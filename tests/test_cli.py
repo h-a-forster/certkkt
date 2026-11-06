@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 
 import pytest
@@ -60,6 +61,21 @@ def test_require_level_checks_every_repair_certificate(tmp_path, lp_file, monkey
     args = ["certify", str(lp_file), str(sol), "--require-level"]
     assert main([*args, "dual_feasible"]) == 0
     assert main([*args, "primal_feasible"]) == 1
+
+
+def test_require_eps_checks_every_repair_certificate(tmp_path):
+    # min -x1 - x2 on the unit disc: the optimum -sqrt(2) is irrational, so the floats have
+    # tiny residuals while the top-ranked exact pair has a wider gap.
+    f = tmp_path / "disc.cbf"
+    f.write_text(
+        "VER\n3\nOBJSENSE\nMIN\nVAR\n2 1\nF 2\nCON\n3 1\nQ 3\n"
+        "OBJACOORD\n2\n0 -1\n1 -1\nACOORD\n2\n1 0 1\n2 1 1\nBCOORD\n1\n0 1\n"
+    )
+    r = math.sqrt(0.5)
+    sol = tmp_path / "sol.json"
+    sol.write_text(json.dumps({"x": [r, r], "z": [math.sqrt(2), -1, -1]}))
+    assert main(["certify", str(f), str(sol), "--require-eps", "1e-14"]) == 0
+    assert main(["certify", str(f), str(sol), "--require-eps", "1e-30"]) == 1
 
 
 def test_malformed_require_eps_is_a_usage_error(tmp_path, lp_file):

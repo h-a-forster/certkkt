@@ -104,6 +104,7 @@ def test_fixed_format_names_may_contain_spaces():
         ),
         (lambda t: t.replace("-0.5", "0.5x"), "bad number"),
         (lambda t: t.replace(" L  r2", " L  r1"), "duplicate row"),
+        (lambda t: t.replace("rhs       r3        2.0", "rhs       r3  2.0  r3  3.0"), "duplicate"),
     ],
 )
 def test_malformed_qps_fails_loudly(edit, message):

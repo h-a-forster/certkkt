@@ -221,7 +221,10 @@ def _parse(text: str, default_name: str, exact_decimals: bool, *, fixed: bool) -
                 i = row_index.get(rn)
                 if i is None:
                     raise FormatError(f"line {lineno}: unknown row {rn!r}")
-                (rhs if section == "RHS" else ranges)[i] = v
+                target = rhs if section == "RHS" else ranges
+                if i in target:
+                    raise FormatError(f"line {lineno}: duplicate {section} entry for {rn!r}")
+                target[i] = v
         elif section == "BOUNDS":
             t = tokens[0].upper()
             if t in ("BV", "LI", "UI", "SC"):

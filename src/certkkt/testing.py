@@ -19,7 +19,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from certkkt.certify import LEVELS, Certificate, certify, first_meeting
+from certkkt.certify import LEVELS, Certificate, certify, first_certified, first_meeting
 from certkkt.problem import ConicProblem
 from certkkt.repair import repair
 
@@ -51,22 +51,24 @@ def assert_certified(
     eps: str | float = "1e-6",
     repair_first: bool = False,
 ) -> Certificate:
-    """Assert that every exact relative residual is at most ``eps``.
+    """Assert that every exact relative residual is at most ``eps`` (on a problem with a
+    PSD objective, see :meth:`Certificate.certified_at`).
 
-    With ``repair_first`` the certificate is the best one found by
-    :func:`certkkt.repair.repair` (useful when the claim under test is "this solution is
-    within eps of an exactly optimal one" rather than "these floats satisfy eps").
+    With ``repair_first`` any certificate from :func:`certkkt.repair.repair` may meet it
+    (useful when the claim under test is "this solution is within eps of an exactly
+    optimal one" rather than "these floats satisfy eps").
     """
     if z is None:
         raise AssertionError("no dual solution: optimality cannot be certified")
     if repair_first:
         import numpy as np
 
-        cert = repair(problem, np.asarray(x, float), np.asarray(z, float)).best
+        certs = repair(problem, np.asarray(x, float), np.asarray(z, float)).certificates
     else:
-        cert = certify(problem, x, z)
-    if not cert.certified_at(eps):
-        raise AssertionError(f"not certified at eps={eps}: {_describe(cert)}")
+        certs = [certify(problem, x, z)]
+    cert = first_certified(certs, eps)
+    if cert is None:
+        raise AssertionError(f"not certified at eps={eps}: {_describe(certs[0])}")
     return cert
 
 

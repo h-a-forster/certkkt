@@ -42,7 +42,7 @@ import numpy as np
 
 from certkkt.problem import ConicProblem
 from certkkt.rational import ONE, ZERO, Q, _nearest, dot, max_abs, q_float_up, sqrt_up, to_q
-from certkkt.sparse import DEFAULT_BUDGET, psd_check
+from certkkt.sparse import PSD_BUDGET, psd_check
 
 LEVELS = ("optimal", "bounded", "primal_feasible", "dual_feasible", "residuals")
 #: Levels each level implies. The order is partial: primal_feasible and dual_feasible are
@@ -69,6 +69,12 @@ def first_meeting(certs: Iterable[Certificate], required: str) -> Certificate | 
     certificate can meet a requirement that the best one does not."""
     meets_level("optimal", required)  # rejects an unknown level even if certs is empty
     return next((c for c in certs if meets_level(c.level, required)), None)
+
+
+def first_certified(certs: Iterable[Certificate], eps: str | float | Any) -> Certificate | None:
+    """The first certificate in ``certs`` certified at ``eps``, or None. Rank does not
+    order this either: an exact pair with a wide gap outranks floats with small residuals."""
+    return next((c for c in certs if c.certified_at(eps)), None)
 
 
 #: Thresholds at which certificates are classified by default (exact decimals).
@@ -116,9 +122,10 @@ class Certificate:
         return max(self.rel_primal, self.rel_dual, self.rel_gap)
 
     def certified_at(self, eps: str | float | Any) -> bool:
-        """True if every relative residual is at most eps (exact comparison)."""
+        """True if every relative residual is at most eps (exact comparison) and the gap
+        means something: without a PSD objective a KKT point need not be optimal."""
         mr = self.max_rel
-        return mr is not None and mr <= to_q(eps)
+        return mr is not None and self.psd in ("zero", "psd") and mr <= to_q(eps)
 
     def rank(self) -> tuple[int, float, int]:
         """Sort key, lower is better: optimal, then bounded, then everything else by the
@@ -177,7 +184,7 @@ def _short(v: Any | None, limit: int = 200) -> str | None:
     return s if len(s) <= limit else None
 
 
-def psd_status(problem: ConicProblem, budget: int = DEFAULT_BUDGET) -> str:
+def psd_status(problem: ConicProblem, budget: int = PSD_BUDGET) -> str:
     """ "zero", "psd", "not_psd" or "unknown" (budget exhausted), cached in problem.meta."""
     status = problem.meta.get("psd_status")
     if status is None:
@@ -256,7 +263,7 @@ def certify(
     z: Sequence[Any] | None,
     *,
     method: str = "as_is",
-    psd_budget: int = DEFAULT_BUDGET,
+    psd_budget: int = PSD_BUDGET,
 ) -> Certificate:
     """Certify a candidate. ``x`` and ``z`` may be floats (converted exactly) or rationals."""
     n, m = problem.n, problem.m
@@ -380,6 +387,7 @@ def float_residuals(problem: ConicProblem, x: np.ndarray, z: np.ndarray | None) 
 __all__ = [
     "DEFAULT_EPS",
     "LEVELS",
+    "first_certified",
     "first_meeting",
     "meets_level",
     "Certificate",

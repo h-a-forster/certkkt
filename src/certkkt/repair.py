@@ -96,7 +96,8 @@ def repair(
 
     ``time_budget`` (seconds) bounds the exact solves of all methods together; a method
     that runs out of time or operations (``budget`` per elimination) is noted and its
-    candidates dropped. Certification itself is linear in the data size and not bounded.
+    candidates dropped, as are those of a method that fails numerically. Certification
+    itself is linear in the data size and not bounded.
     """
     if methods is None:
         methods = POLYHEDRAL_ORDER if problem.is_polyhedral else CONIC_ORDER
@@ -110,7 +111,7 @@ def repair(
     certs: list[Certificate] = []
     notes: dict[str, str] = {}
     seconds: dict[str, float] = {}
-    psd_status(problem, budget)  # computed once, reused by every certificate
+    psd_status(problem)  # computed once, reused by every certificate
 
     def done() -> bool:
         return stop_at_optimal and any(c.level == "optimal" for c in certs)
@@ -127,6 +128,12 @@ def repair(
             new = _run(mth, problem, x, zf, lim)
         except BudgetExceeded as exc:
             notes[mth] = f"budget: {exc}"
+            new = []
+        except (ArithmeticError, ValueError) as exc:
+            if mth == "as_is":
+                raise
+            # Float steps can overflow on wild input; only this method's candidates are lost.
+            notes[mth] = f"failed: {type(exc).__name__}: {exc}"
             new = []
         seconds[mth] = time.perf_counter() - t0
         if isinstance(new, str):

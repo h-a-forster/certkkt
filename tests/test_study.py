@@ -70,8 +70,9 @@ def test_paired_tests_and_share_rounding():
 def test_report_compares_exactly_and_counts_comparable_units():
     # float("1e-8") is above the decimal 1e-8, so it does not meet eps = "1e-8".
     rec = {"key": "a", "suite": "s", "solver": "x", "instance": "i", "tol": "default"}
-    over = {**rec, "as_is": {"max_rel": float("1e-8")}}
+    over = {**rec, "as_is": {"max_rel": float("1e-8"), "psd": "zero"}}
     assert not asis_ok(over, "1e-8") and asis_ok(over, "1e-6")
+    assert not asis_ok({**rec, "as_is": {"max_rel": 0.0, "psd": "not_psd"}}, "1e-6")
     full = {**over, "float": {"rel_primal": 0.0, "rel_dual": 1e-9, "rel_gap": 0.0}}
     no_float = {**over, "key": "b", "instance": "j"}
     assert "disagree at eps = 1e-8 on 1 of 1 default" in markdown([full, no_float])

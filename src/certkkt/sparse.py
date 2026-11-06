@@ -25,6 +25,8 @@ from certkkt.rational import ZERO, Q, to_q
 
 #: Default number of scalar update operations allowed in one elimination.
 DEFAULT_BUDGET = 20_000_000
+#: Default budget of :func:`psd_check` in pivot-word updates (about a minute).
+PSD_BUDGET = 100_000_000
 
 
 class BudgetExceeded(RuntimeError):
@@ -546,13 +548,15 @@ class PSDResult:
         return self.status == "psd"
 
 
-def psd_check(mat: QMatrix, *, budget: int = DEFAULT_BUDGET) -> PSDResult:
+def psd_check(mat: QMatrix, *, budget: int = PSD_BUDGET) -> PSDResult:
     """Decide exactly whether a symmetric rational matrix is positive semidefinite.
 
     Symmetric Gaussian elimination: a matrix is PSD iff, after eliminating a positive
     diagonal pivot, its Schur complement is PSD; a negative diagonal, or a zero diagonal
     with a nonzero off-diagonal in its row, refutes it. Pivots are chosen by smallest
-    degree. Returns status "unknown" if the budget runs out.
+    degree. Returns status "unknown" if the budget runs out. An update counts one per
+    64-bit word of its pivot, because exact coefficients grow with fill-in and a budget of
+    plain updates does not bound the time (CVXQP1_L ran past 20 minutes under it).
     """
     n = mat.shape[0]
     if mat.shape[1] != n:
@@ -598,6 +602,7 @@ def psd_check(mat: QMatrix, *, budget: int = DEFAULT_BUDGET) -> PSDResult:
             continue
         remaining.discard(pivot)
         nbrs = [(j, v) for j, v in row.items() if j != pivot]
+        words = 1 + (int(d.numerator).bit_length() + int(d.denominator).bit_length()) // 64
         for j, _ in nbrs:
             del rows[j][pivot]
         for a, (j, vj) in enumerate(nbrs):
@@ -613,11 +618,11 @@ def psd_check(mat: QMatrix, *, budget: int = DEFAULT_BUDGET) -> PSDResult:
                     rj.pop(k, None)
                     if k != j:
                         rows[k].pop(j, None)
-            ops += len(nbrs) - a
+            ops += (len(nbrs) - a) * words
+            if ops > budget:
+                return PSDResult("unknown", f"elimination exceeded {budget} operations")
             heapq.heappush(heap, (len(rj), j))
         rows[pivot] = {}
-        if ops > budget:
-            return PSDResult("unknown", f"elimination exceeded {budget} operations")
     return PSDResult("psd", "exact symmetric elimination")
 
 
@@ -628,6 +633,7 @@ def q_list(values: Iterable[object]) -> list[Any]:
 
 __all__ = [
     "DEFAULT_BUDGET",
+    "PSD_BUDGET",
     "BudgetExceeded",
     "check_deadline",
     "PSDResult",

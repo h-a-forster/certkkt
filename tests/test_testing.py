@@ -1,3 +1,4 @@
+import math
 import os
 import subprocess
 import sys
@@ -25,6 +26,14 @@ def test_assertions_pass_and_fail():
     assert_primal_feasible(p, [Q(1), Q(0)], eps="0")
     with pytest.raises(AssertionError):
         assert_primal_feasible(p, [0.4, 0.5], eps="1e-3")
+
+
+def test_assert_certified_with_repairs_accepts_any_certificate():
+    # The irrational optimum of min -x1 - x2 on the unit disc: the floats beat the
+    # top-ranked exact pair, whose interior push widens the gap.
+    p = make_problem(A=[[0, 0], [-1, 0], [0, -1]], b=[1, 0, 0], cones=[("soc", 3)], q=[-1, -1])
+    x, z = [math.sqrt(0.5)] * 2, [math.sqrt(2), -1.0, -1.0]
+    assert assert_certified(p, x, z, eps="1e-14", repair_first=True).method == "as_is"
 
 
 def test_assert_level_repairs_first():

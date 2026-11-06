@@ -86,7 +86,8 @@ def test_my_solver(certkkt):  # tolerance from --certkkt-eps (default 1e-6)
 Relative measures: `rel_primal = r_P / (1 + ||b||_inf)`, `rel_dual = r_D / (1 + ||q||_inf)`,
 `rel_gap = |pobj - dobj| / (1 + |pobj| + |dobj|)`; `max_rel` is the largest of the three.
 For QPs the dual bound is valid only if `P` is positive semidefinite, which certkkt
-decides exactly; otherwise dual-based levels are withheld. Details:
+decides exactly; otherwise dual-based levels are withheld and nothing counts as certified
+at an eps. Details:
 [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Repairs

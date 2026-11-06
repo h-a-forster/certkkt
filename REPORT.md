@@ -103,8 +103,10 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
   request, mostly above it, so a request of 1e-8 is met in certkkt's measure for 1/6
   (Clarabel) and 0/6 (ECOS) units. SCS lands one to two orders below its request, so its
   requested tolerance is conservative in this measure.
-- The exact relative gap is two to three orders smaller than `max_rel` throughout; the
-  dual residual is the binding measure.
+- The exact relative gap is two to three orders smaller than `max_rel` in the median of
+  every cell. The binding measure is the primal cone violation of `s = b - A x` on all 48
+  Clarabel and ECOS units; on SCS it is the dual residual (17 of 24 units) or the primal
+  cone violation (7).
 
 ## 4. Repair diagnostics
 
@@ -129,14 +131,12 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
 
 ## 5. Mittelmann SOCP benchmark: coverage and reproduction
 
-- A figure of Clarabel solving 14 of the 18 instances could not be traced to the
-  benchmark. Mittelmann's "Large Second Order Cone
-  Benchmark" (https://plato.asu.edu/ftp/socp.html) lists MOSEK, ECOS, KNITRO, COPT,
-  Gurobi, OPTVERSE, cuOpt or COPT-PDHCG in every version checked: the live page dated
-  26 Oct 2026 and Internet Archive snapshots of pages dated 12 Nov 2022, 11 Sep 2024,
-  31 Oct 2024, 5 Apr 2025, 29 Oct 2025, 9 Jan 2026 and 10 Aug 2026. None lists Clarabel,
-  and the log directory (plato.asu.edu/ftp/socp_logs/) has no Clarabel folder. If the
-  figure exists, it comes from a separate run on the same instances.
+- The benchmark has no Clarabel results to compare with. Mittelmann's "Large Second
+  Order Cone Benchmark" (https://plato.asu.edu/ftp/socp.html) lists MOSEK, ECOS, KNITRO,
+  COPT, Gurobi, OPTVERSE, cuOpt or COPT-PDHCG in every version checked: the live page
+  dated 26 Oct 2026 and Internet Archive snapshots of pages dated 12 Nov 2022, 11 Sep
+  2024, 31 Oct 2024, 5 Apr 2025, 29 Oct 2025, 9 Jan 2026 and 10 Aug 2026. None lists
+  Clarabel, and the log directory (plato.asu.edu/ftp/socp_logs/) has no Clarabel folder.
 - Only 7 of the 18 instances are on CBLIB's public download list (beam7, beam30,
   chainsing-50000-1/2/3, db-joint-soerensen, db-plate-yield-line); fir*, dsNRL and wbNRL
   are not. A reproduction can cover at most 7/18. The full profile runs Clarabel, SCS
@@ -146,8 +146,7 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
 - Single pilot measurement (not part of the tables): Clarabel 0.11.1 at defaults on
   chainsing-50000-3 (350k variables, 950k nonzeros) returned status AlmostSolved
   ("inaccurate") after 17 s; certkkt loaded the instance in 11 s and certified the floats
-  in 8 s, exact as-is `max_rel` 2.8e-9 (level `residuals`). Under a "solved" count that
-  excludes almost-solved statuses, this instance would count against Clarabel.
+  in 8 s, exact as-is `max_rel` 2.8e-9 (level `residuals`).
 
 ## 6. Limitations
 
@@ -159,7 +158,10 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
   data (the 6 portfolio instances use the same returns), so the intervals are optimistic
   and say nothing about the full benchmark sets.
 - Repair success rates are bounded by the time budget (30 s) and by pure-Python exact
-  elimination; a failed repair is not evidence that no exact certificate exists.
+  elimination; a failed repair is not evidence that no exact certificate exists. The
+  budget also makes them depend on machine load: a rerun reproduced every status,
+  as-is residual and table, but the budget ran out on 7 mm units instead of 15
+  ([docs/results/quick-rerun.md](docs/results/quick-rerun.md)).
 - certkkt's relative measures are not the solvers' stopping criteria; "meets the
   requested tolerance" is in certkkt's measure.
 - Problems are certified as published (exact decimals); the solvers saw the nearest

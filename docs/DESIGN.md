@@ -59,7 +59,8 @@ passes `y` unclipped, so a wrong-signed multiplier shows up as a dual cone viola
   QMATRIX (full), ENDATA. Conventions as in HiGHS and CPLEX: first N row is the
   objective; an RHS on it is the negated constant; RANGES on E rows widen by sign; a
   negative UP bound with default lower bound sets the lower bound to -inf (warned).
-  Integer markers and bound types are rejected.
+  Integer markers and bound types are rejected, and so are duplicate matrix, RHS and RANGES
+  entries.
 - **CBF** (`cbf.py`): versions 1-3, cones F, L+, L-, L=, Q, QR on variables and
   constraints. A rotated cone `2 x0 x1 >= ||w||^2` maps to the SOC by the exact rational
   map `(x0 + x1/2, x0 - x1/2, w)`. PSD, exponential/power cones and integers are rejected.
@@ -118,8 +119,9 @@ Violation *magnitudes* involve a square root and are reported as rational upper 
 
 `rel_primal = r_P / (1 + ||b||_inf)`, `rel_dual = r_D / (1 + ||q||_inf)`,
 `rel_gap = |gap| / (1 + |pobj| + |dobj|)`, `max_rel = max` of the three. A candidate is
-*certified at eps* when `max_rel <= eps`, compared exactly (eps is an exact decimal).
-These are certkkt's measures; solvers use their own scalings, so "requested tolerance"
+*certified at eps* when `max_rel <= eps`, compared exactly (eps is an exact decimal), and
+`P` is PSD (section 3.3): without that, zero residuals only show a KKT point, which can be
+a saddle. These are certkkt's measures; solvers use their own scalings, so "requested tolerance"
 and "certified accuracy" are not expected to coincide (section 5.4).
 
 ### 3.3 Levels
@@ -133,9 +135,10 @@ and "certified accuracy" are not expected to coincide (section 5.4).
 | `residuals` | neither | exact residuals only |
 
 The dual bound needs `P` positive semidefinite. `psd_check` decides it exactly
-(diagonal dominance test, then symmetric elimination with an operation budget); if `P` is
-not PSD or the budget runs out ("unknown"), dual-based levels are downgraded and a note
-says why. A negative gap for an exactly feasible pair is impossible and raises.
+(diagonal dominance test, then symmetric elimination with a budget of about a minute,
+each update counted by the size of its pivot, so that the budget also bounds coefficient
+growth); if `P` is not PSD or the budget runs out ("unknown"), dual-based levels are
+downgraded and a note says why. A negative gap for an exactly feasible pair is impossible and raises.
 
 The levels are partially ordered: `optimal` implies `bounded`, which implies both one-sided
 levels, but `primal_feasible` and `dual_feasible` are incomparable. A required level
@@ -181,9 +184,9 @@ trusted, so repairs affect only the success rate, never soundness. Methods:
 
 Default order: `as_is, active_set, fixed, snapped, interior` for polyhedral problems and
 `as_is, interior, fixed, snapped` for SOCPs, stopping at the first `optimal`. One time
-budget covers all methods; a method that exceeds it or the elimination operation budget
-is noted and dropped (the deadline is checked between steps, so overshoot of a few
-seconds is possible).
+budget covers all methods; a method that exceeds it or the elimination operation budget,
+or fails numerically (float steps can overflow on wild input), is noted and dropped (the
+deadline is checked between steps, so overshoot of a few seconds is possible).
 
 ## 5. Study (`study.py`, `datasets.py`, `portfolio.py`, `report.py`)
 
@@ -315,5 +318,7 @@ sets.
   more than about 10^4 nonzeros; the time budget caps it and the report states the
   resulting success rates rather than hiding failures.
 - `psd_check` and exact elimination have operation budgets; "unknown" PSD status
-  downgrades dual-based certificates rather than guessing.
+  downgrades dual-based certificates rather than guessing. Of the 138 Maros-Meszaros
+  problems, CVXQP1/2/3_L, STCQP1/2 and EXDATA end "unknown" within `psd_check`'s budget
+  and VALUES is not PSD.
 - Infeasible or unbounded claims are not certified (no Farkas certificates in v0.1).

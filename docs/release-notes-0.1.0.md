@@ -55,13 +55,32 @@ reported. So there are no results for the Maros-Meszaros and CBLIB tolerance swe
 larger Maros-Meszaros problems, the other CBLIB instances, the rest of the portfolio
 family or the Mittelmann instances.
 
+## Changes after the first draft of these notes (2026-11-06)
+
+- `--require-eps` and `assert_certified(repair_first=True)` now accept any repair
+  certificate that meets eps. They looked at the top-ranked one only, so an exact pair
+  with a wide gap could fail a check that the floats themselves pass.
+- Nothing counts as certified at an eps when `P` is not known to be PSD: zero residuals
+  on a non-convex QP only show a KKT point, and `--require-eps` used to pass on a saddle.
+- `psd_check`'s budget counts the size of each pivot. With plain updates it ran past the
+  1200 s hard timeout on CVXQP1_L, which accounts for the timeouts of the stopped full
+  run; those problems now end with PSD status "unknown" after about a minute.
+- A repair method that fails numerically (float steps overflow on huge solver output) is
+  noted and dropped; `repair` used to raise and lose the as-is certificate.
+- The QPS reader refuses duplicate RHS and RANGES entries, as it does in COLUMNS.
+- `REPORT.md` section 3 named the wrong binding measure: on the Clarabel and ECOS
+  portfolio units it is the primal cone violation, not the dual residual.
+- A rerun of the quick study reproduced every status, as-is residual and table
+  (`docs/results/quick-rerun.md`). `scripts/highs_tolerances.py` also prints the count of
+  solutions that move with the tolerance, which DESIGN cites.
+
 ## Limits
 
 - Infeasibility and unboundedness claims are not certified; there is no PSD cone.
 - Exact elimination is pure Python and dominates repair time above about 10^4 nonzeros;
   ill-conditioned equality systems (nql30) defeat the exact correction.
 - At most 7 of the 18 Mittelmann SOCP instances are publicly downloadable.
-- The CI workflow has not run on GitHub; the 140 tests pass locally (Windows, Python
+- The CI workflow has not run on GitHub; the 146 tests pass locally (Windows, Python
   3.12).
 
 The full list of changes is in [CHANGELOG.md](../CHANGELOG.md).

@@ -24,8 +24,8 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 - Long computations: one fsynced JSON line per unit, resume by key, `progress.log`,
   hard per-unit timeout, retry wrapper. Run anything over ~8 minutes through the
   launcher pattern (see "How to run the study").
-- Commits end with the project's co-author trailer. The GitHub repo is private; do not
-  make it public or publish releases without the owner's go-ahead.
+- The GitHub repo is private; do not make it public or publish releases without the
+  owner's go-ahead. Open work lives in [backlog.md](backlog.md).
 
 ## Architecture map
 
@@ -48,7 +48,7 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 
 ```sh
 uv sync --all-extras
-uv run pytest -m "not slow"   # about 30 s
+uv run pytest -m "not slow"   # about 10 s
 uv run pytest                 # adds study-runner tests that spawn workers
 uv run ruff check . && uv run ruff format --check .
 CERTKKT_RATIONAL=fraction uv run pytest tests/test_certify.py   # pure-Python backend
@@ -67,34 +67,26 @@ The full profile runs for hours: `bash scripts/run_study.sh` (fetch, three-attem
 retry loop, log in `runs/longrun.log`, report in `runs/full/report.md`). Environment
 variables `SUITES`, `WORKERS`, `RUN_DIR`, `MAX_UNITS` and `LOG` restrict or redirect it.
 
-## Status and next steps
+## Status
 
-Status (2026-10-30): v0.1.0. Library, CLI, plugin and adapters done and tested (140
-tests, all passing locally; the CI workflow has not run on GitHub yet); quick study run
-and reported in REPORT.md. The full study was started and stopped by owner decision at
-348/3093 units (all Maros-Meszaros; 28 hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L
-and CVXQP3_L) after 6.4 h, its own projection then about 50 more hours
-(`runs/full/progress.log`); it is not reported.
+Status (2026-11-06): v0.1.0. Library, CLI, plugin and adapters done and tested (146
+tests, all passing locally; the CI workflow has not run on GitHub yet); quick study run,
+reported in REPORT.md and reproduced by a rerun (`docs/results/quick-rerun.md`). The full
+study was started and stopped by owner decision at 348/3093 units (all Maros-Meszaros; 28
+hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, its own
+projection then about 50 more hours (`runs/full/progress.log`); it is not reported.
 
-Full-profile time estimate (3 workers), from measured units: small Maros-Meszaros units
-about 6 s, 100 kB-1 MB files 2-28 s, larger files about 90 s (repairs overshoot their
-60 s budget; LISWET3 94 s, AUG2DQP 88 s), EXDATA (2.3M nonzeros) 23 s load and no exact
-work; CBLIB default units 60-100 s; Mittelmann units 0.5-1 h each (chainsing-50000-3:
-load 11 s, Clarabel 17 s, certify 8 s, then up to 300 s of repairs; SCS may use its
-3600 s limit). About 6 hours in total (range 4-9 h), the Mittelmann suite being the
-least certain part. That estimate did not hold (see Status): re-estimate before a
-rerun, which resumes from `runs/full`. Memory: db-joint-soerensen (6M nonzeros) needs
-several GB per worker while parsed as exact rationals.
+Those timeouts came from `psd_check`, whose budget then counted plain updates while the
+exact coefficients grew. It now counts words and ends "unknown" in about a minute (DESIGN
+3.3). `runs/full` still holds the 28 timeout records, and a resume skips recorded units:
+drop those records first.
 
-Next steps, in order:
-
-1. Cut the full profile's run time (the large Maros-Meszaros units time out), finish it
-   and fold `runs/full/report.md` into REPORT.md.
-2. Mittelmann SOCP: obtain the 11 instances that are not on CBLIB's download list (fir*,
-   dsNRL, wbNRL) and a float-only path for beam30 (64M nonzeros) to cover all 18.
-3. Repair speed: exact elimination in pure Python dominates repair time above ~10^4
-   nonzeros; a compiled sparse rational LU (e.g. via FLINT) would lift the size limit.
-4. Ill-conditioned equality systems (nql/qssp in CBLIB): the exact basic correction moves
-   x by O(1) or more; a float rank-revealing basis choice should fix most cases.
-5. Farkas certificates for infeasibility/unboundedness claims; PSD cone (where the dual
-   membership certificates of Lee, Papp and Varga become necessary).
+Full-profile cost, from measured units: small Maros-Meszaros units about 6 s, 100 kB-1 MB
+files 2-28 s, larger files about 90 s (repairs overshoot their 60 s budget; LISWET3 94 s,
+AUG2DQP 88 s), but HiGHS spends its whole 600 s limit and more on the CONT, BOYD and
+AUG2D problems (up to 779 s); EXDATA (2.3M nonzeros) 23 s load and no exact work; CBLIB
+default units 60-100 s; Mittelmann units 0.5-1 h each (chainsing-50000-3: load 11 s,
+Clarabel 17 s, certify 8 s, then up to 300 s of repairs; SCS may use its 3600 s limit).
+The earlier estimate of about 6 hours did not hold: re-estimate before a rerun. Memory:
+db-joint-soerensen (6M nonzeros) needs several GB per worker while parsed as exact
+rationals.

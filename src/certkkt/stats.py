@@ -44,11 +44,15 @@ def mcnemar_exact(b: int, c: int) -> float:
 
 
 def holm(pvalues: list[float]) -> list[float]:
-    """Holm step-down adjusted p-values, in the input order."""
-    m = len(pvalues)
-    out = [0.0] * m
+    """Holm step-down adjusted p-values, in the input order.
+
+    NaN entries stay NaN and do not count toward the family size.
+    """
+    kept = [i for i, p in enumerate(pvalues) if not math.isnan(p)]
+    m = len(kept)
+    out = [math.nan] * len(pvalues)
     running = 0.0
-    for rank, i in enumerate(sorted(range(m), key=lambda i: pvalues[i])):
+    for rank, i in enumerate(sorted(kept, key=lambda i: pvalues[i])):
         running = max(running, min(1.0, (m - rank) * pvalues[i]))
         out[i] = running
     return out

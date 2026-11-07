@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import math
 import random
 import zipfile
 
@@ -62,6 +63,10 @@ def test_paired_tests_and_share_rounding():
     assert mcnemar_exact(7, 0) == 2 / 2**7 and mcnemar_exact(0, 0) == 1.0
     assert mcnemar_exact(4, 4) == 1.0
     assert holm([0.031, 0.002, 0.5]) == [0.062, 0.006, 0.5]
+    # NaN stays NaN and leaves the family, wherever it sits (it used to depend on the position).
+    assert repr(holm([0.01, math.nan, 0.02])) == repr([0.02, math.nan, 0.02])
+    assert repr(holm([math.nan, 0.01, 0.02])) == repr([math.nan, 0.02, 0.02])
+    assert repr(holm([math.nan, math.nan])) == repr([math.nan, math.nan])
     # Ties round half up whatever the float representation of 100 * k / n.
     assert fmt_share(37, 40).startswith("37/40 = 93%")
     assert fmt_share(3, 40).startswith("3/40 = 8%")

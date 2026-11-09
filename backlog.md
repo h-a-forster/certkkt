@@ -6,7 +6,6 @@
 
 - CI passes on GitHub through one manual dispatch (it has never run, and private-repo minutes are metered).
 - The 34 commits up to `bada8e5` no longer carry a Co-Authored-By trailer, by a history rewrite and force push, if wanted before going public.
-- The repository is public with v0.1.0 tagged and private vulnerability reporting enabled (SECURITY.md relies on it).
 
 ## Decided
 

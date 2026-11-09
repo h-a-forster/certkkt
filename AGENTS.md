@@ -25,7 +25,7 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
   hard per-unit timeout, retry wrapper. Run anything over ~8 minutes through the
   launcher pattern (see "How to run the study").
 - The GitHub repo is private; do not make it public or publish releases without the
-  owner's go-ahead. Open work lives in [backlog.md](backlog.md).
+  owner's go-ahead. Open work lives in `backlog.md`.
 
 ## Architecture map
 
@@ -78,7 +78,7 @@ hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, it
 projection then about 50 more hours (`runs/full/progress.log`); it is not reported.
 
 The 3093-unit full profile is not runnable as designed, and finishing it is not the plan:
-it needs a redesign (size cap and repair budget, see [backlog.md](backlog.md)), not a
+it needs a redesign (size cap and repair budget, see `backlog.md`), not a
 resume. Those timeouts came from `psd_check`, whose budget then counted plain updates
 while the exact coefficients grew. It now counts words and ends "unknown" in about a
 minute (DESIGN 3.3). That removes about half of the run's worker time (28 x 1200 s of

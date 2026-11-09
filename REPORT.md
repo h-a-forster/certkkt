@@ -130,8 +130,7 @@ after the cell, how many of 6 meet the requested tolerance in certkkt's measure:
   float least-norm step stalls at an equality residual of about 1.5e-14, and the exact
   basic correction of that remainder is badly conditioned. The instance contains
   coefficients 0.5000000000015 next to 0.5, which plausibly makes nearly dependent
-  equality rows exactly independent. A rank-revealing basis choice is the planned fix
-  ([backlog.md](backlog.md)).
+  equality rows exactly independent. A rank-revealing basis choice is the planned fix.
 
 ## 5. Mittelmann SOCP benchmark: coverage and reproduction
 

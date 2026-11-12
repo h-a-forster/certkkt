@@ -24,8 +24,8 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 - Long computations: one fsynced JSON line per unit, resume by key, `progress.log`,
   hard per-unit timeout, retry wrapper. Run anything over ~8 minutes through the
   launcher pattern (see "How to run the study").
-- The GitHub repo is private; do not make it public or publish releases without the
-  owner's go-ahead. Open work lives in `backlog.md`.
+- The GitHub repo is public; publish releases only with the owner's go-ahead. Open work
+  lives in `backlog.md` (gitignored, local only).
 
 ## Architecture map
 

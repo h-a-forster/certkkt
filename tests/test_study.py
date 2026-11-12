@@ -80,7 +80,7 @@ def test_report_compares_exactly_and_counts_comparable_units():
     assert not asis_ok({**rec, "as_is": {"max_rel": 0.0, "psd": "not_psd"}}, "1e-6")
     full = {**over, "float": {"rel_primal": 0.0, "rel_dual": 1e-9, "rel_gap": 0.0}}
     no_float = {**over, "key": "b", "instance": "j"}
-    assert "disagree at eps = 1e-8 on 1 of 1 default" in markdown([full, no_float])
+    assert "disagree at eps = 1e-8 on 1 of 1 units" in markdown([full, no_float])
 
 
 @pytest.fixture

@@ -28,6 +28,16 @@ AGENTS.md). Every number below comes from
 
 ## 2. Headline
 
+On this set, exact arithmetic adds certificates, not verdicts. Float64 evaluation of the
+residuals gives the same pass or fail as exact evaluation on all 243 units with a solution,
+at 1e-4, 1e-6 and 1e-8 (largest absolute difference 2e-11), so the as-is columns below,
+and the failure counts in finding 1, need no exact arithmetic. What does need it: none of
+the 243 float outputs is exactly feasible on both sides as returned (216 `residuals`, 27
+`primal_feasible`), and only the exact repairs turn them into certificates. They found an
+exact rational optimum for 93 Maros-Meszaros units (29 of 40 problems, every one of them
+from HiGHS output) and an exactly feasible primal-dual pair bracketing the optimum
+(`bounded`) for all 72 portfolio units and 16 more Maros-Meszaros units.
+
 Exact certification of default solver output, Maros-Meszaros subset (n = 40 problems per
 solver; nominal 95% Wilson intervals, see section 6):
 
@@ -70,13 +80,14 @@ exactly zero (an exact rational optimum).
    19/40 exact optima). The exact optimum depends only on the problem, so these counts
    measure how well each solver's output identifies the active set; HiGHS is an
    active-set QP solver.
-3. **Float64 evaluation of the residuals was never wrong at 1e-8.** On all 189 default
-   units with a solution, float64 and exact evaluation agreed about `max_rel <= 1e-8`.
-   The threshold test alone has little power (only 14 units have an exact `max_rel`
-   within a factor of 2 of 1e-8), but the discrepancies are small throughout: the largest
-   |log10(float64 / exact)| of `max_rel` is 0.15, at values near 1e-16. The value of
-   exact arithmetic here lies in the certificates (exact feasibility, exact bounds, exact
-   optima), not in re-evaluating residuals.
+3. **Float64 evaluation of the residuals was never wrong.** On all 243 units with a
+   solution (every suite and tolerance), float64 and exact evaluation agreed about
+   `max_rel <= eps` at 1e-4, 1e-6 and 1e-8. The threshold test alone has little power
+   (12 units have an exact `max_rel` within a factor of 2 of 1e-6, 18 of 1e-8), but the
+   discrepancies are small throughout: the largest |log10(float64 / exact)| of `max_rel`
+   is 0.15, at values near 1e-16. The value of exact arithmetic here lies in the
+   certificates (exact feasibility, exact bounds, exact optima), not in re-evaluating
+   residuals.
 4. **Portfolio SOCPs: exact two-sided bounds from every solve; the gap is what differs.**
    All 72 portfolio units (every solver and tolerance) were repaired to `bounded`
    certificates (exactly feasible primal and dual). At defaults the exact relative gap is

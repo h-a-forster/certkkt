@@ -150,15 +150,16 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
             lines.append("| " + " | ".join(cells) + " |")
         lines.append("")
         lines += _paired(default)
-        comparable = [r for r in default if float_max_rel(r) is not None]
-        dis = [r for r in comparable if float_disagrees(r, "1e-8")]
-        lines.append(
-            f"Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-8 on "
-            f"{len(dis)} of {len(comparable)} default units with both"
-            + (": " + ", ".join(r["key"] for r in dis[:10]) if dis else "")
-            + ("" if len(dis) <= 10 else ", ...")
-            + "."
-        )
+        comparable = [r for r in records if float_max_rel(r) is not None]
+        for eps in EPS:
+            dis = [r for r in comparable if float_disagrees(r, eps)]
+            lines.append(
+                f"Float64 and exact evaluation of the as-is residuals disagree at eps = {eps} "
+                f"on {len(dis)} of {len(comparable)} units with both"
+                + (": " + ", ".join(r["key"] for r in dis[:10]) if dis else "")
+                + ("" if len(dis) <= 10 else ", ...")
+                + "."
+            )
         if comparable:
             ratio = max(
                 abs(math.log10(max(float_max_rel(r), 1e-300) / max(asis_rel(r), 1e-300)))

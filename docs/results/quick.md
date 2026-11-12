@@ -39,8 +39,10 @@ Exact optimum paired by instance (mm, 40 problems): 29 reached from at least one
 | highs | scs | 7 | 0 | 0.016 | 0.078 |
 | osqp | scs | 0 | 3 | 0.250 | 0.500 |
 
-Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-8 on 0 of 189 default units with both.
-Largest |log10(float64 / exact)| of max_rel: 0.15; 14 units have an exact max_rel within a factor of 2 of 1e-8.
+Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-4 on 0 of 243 units with both.
+Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-6 on 0 of 243 units with both.
+Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-8 on 0 of 243 units with both.
+Largest |log10(float64 / exact)| of max_rel: 0.15; 18 units have an exact max_rel within a factor of 2 of 1e-8.
 
 ## Requested tolerance versus certified accuracy
 

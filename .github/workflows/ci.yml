@@ -1,7 +1,8 @@
 name: CI
 
-# Private-repo minutes are metered: run on pull requests and on demand only.
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 

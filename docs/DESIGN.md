@@ -169,25 +169,32 @@ status claimed: full for `optimal`, reduced for `inaccurate` where the solver de
 | OSQP | `src/auxil.c` `check_termination`, `compute_*_res/_tol`, `compute_obj_val_dual_gap` (C 1.0.0, bundled by osqp-python 1.1.3); defaults `include/public/osqp_api_constants.h` | inf-norms: `A x - z`, `P x + q + A'y`, gap `x'Px + q'x + S(y)`, each `< eps_abs + eps_rel * max(...)` of its terms; `eps = 1e-3`; 10x for "solved inaccurate" |
 | SCS | `src/scs.c` `has_converged`, `populate_residual_struct` (C 3.3.1 at cc244eb, bundled by scs-python 3.3.1); defaults `include/glbopts.h` | inf-norms: `A x + s - b`, `P x + A'y + c`, gap `|x'Px + c'x + b'y|`, each `< eps_abs + eps_rel * max(...)`; `eps = 1e-4` |
 | Clarabel | `src/solver/implementations/default/info.rs` `update`, `is_solved`; `residuals.rs`; `presolver.rs` (Clarabel.rs 0.11.1) | 2-norm residuals over `max(1, ||b||_inf + |x|_2 + |s|_2)` and `max(1, ||q||_inf + |x|_2 + |z|_2)` `< tol_feas`; gap `|p - d| < tol_gap_abs` or `/ max(1, min(|p|, |d|)) < tol_gap_rel`; all `1e-8` (AlmostSolved: `5e-5`, `5e-5`, `1e-4`) |
-| HiGHS | `highs/lp_data/Highs.cpp` `callSolveQp`; `HighsInterface.cpp` `checkOptimality`; `HighsSolution.cpp` `getKktFailures`, `getVariableKktFailures` (1.15.1) | QP path: no bound violated by more than `primal_feasibility_tolerance`, no dual of the wrong sign by more than `dual_feasibility_tolerance` (both `1e-7`); nothing else |
+| HiGHS | `highs/qpsolver/quass.cpp`, `settings.hpp`; `highs/lp_data/Highs.cpp` `callSolveQp`; `HighsInterface.cpp` `checkOptimality`; `HighsSolution.cpp` `getKktFailures`, `getVariableKktFailures` (1.15.1) | QP path, two stages: the active-set solver stops at a point stationary on its working set (search direction `||p||_2 < 1e-11`, or a zero step) with no multiplier to release beyond `dual_feasibility_tolerance`, on `P + 1e-7 I` (not evaluated); then `checkOptimality` keeps "Optimal" only if no bound is violated by more than `primal_feasibility_tolerance` and no dual has the wrong sign by more than `dual_feasibility_tolerance` (both `1e-7`), else reports a solve error (evaluated) |
 
 What cannot be evaluated is stated, not guessed:
 
 - OSQP's primal residual uses its internal iterate `z`, which it does not return. The only
   fact used is `z` in `[l, u]` (the sign of `y` does not pin `z` to a bound: OSQP updates
-  `y` by a sum, so `y_i` can be a rounding residue where `z_i` is interior). With
-  `z0 = proj(A x)`, every `z` has `r(z) >= r(z0)` and `||z|| <= ||A x|| + r(z)`, so the
-  condition fails exactly when `r(z0) (1 - eps_rel) >= eps_abs + eps_rel ||A x||` and is
-  reported as passing when it passes at `z0`; in between it is undetermined. OSQP's
+  `y` by a sum, so `y_i` can be a rounding residue where `z_i` is interior). Every `z` has
+  a threshold of at least `t0 = eps_abs + eps_rel ||A x||`; with `z0 = proj(A x)`, every
+  `z` has `r(z) >= r(z0)` and `||z|| <= ||A x|| + r(z)`. So the condition passes exactly
+  when even the farthest `z` in `[l, u]` has `r < t0` (in practice only where rows pin
+  `z`, `l = u`), fails exactly when `r(z0) (1 - eps_rel) >= t0`, and is undetermined in
+  between, which is the usual case for a converged run. For those, OSQP's own float
+  `prim_res` against `t0` is kept as a diagnostic (`undetermined_by_solver_report`): a
+  pass there holds whatever `||z||` is, but rests on OSQP's float evaluation. OSQP's
   rounding of scaled `|y_i| <= 1e-15` to zero inside `S(y)` is not modelled, nor are
   `scaled_termination` and polishing (the evaluation refuses those runs).
 - Clarabel's fourth condition, `kappa/tau <= 1`, is internal to the homogeneous embedding.
   Its 2-norms are bracketed by rational square-root bounds (`SQRT_BITS`); a criterion whose
   bracket straddles the threshold is undetermined.
-- HiGHS's gate does not test stationarity or complementarity, so a HiGHS "Optimal" says
-  nothing about them. Row activities are evaluated as `A x` exactly; the activities HiGHS
-  returned are checked too and kept as a diagnostic. Its LP paths (simplex, IPM, PDLP)
-  are not modelled.
+- HiGHS's active-set stop tests stationarity, but on its working set, its regularised
+  Hessian and a search-direction norm, none of which it returns, so it is not evaluated.
+  The evaluated gate tests no stationarity or complementarity, and HiGHS turns a failure
+  of it into a solve error, so every returned "Optimal" passes it in floats by
+  construction: the exact evaluation checks only that rounding does not change that. Row
+  activities are evaluated as `A x` exactly; the activities HiGHS returned are checked too
+  and kept as a diagnostic. Its LP paths (simplex, IPM, PDLP) are not modelled.
 - ECOS has no evaluator.
 
 `tests/test_own_tests.py` uses the solvers as oracle: on converged runs the exact values

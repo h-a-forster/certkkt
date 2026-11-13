@@ -37,10 +37,11 @@ over the same records.
 Exact arithmetic earns its place here through certificates, not verdicts. The exact
 repairs turned default solver output into an exact rational optimum for 29 of the 40
 Maros-Meszaros problems, and HiGHS output reaches every one of the 29 (finding 1). Judged
-by its own stopping rule, evaluated exactly, no solver broke its tolerance on any problem
-where it claimed optimal (finding 2). The failure counts in certkkt's uniform measure
-(finding 3) are therefore a statement about that measure, not about the solvers keeping
-their promises, and they need no exact arithmetic (finding 4).
+by its own stopping rule, evaluated exactly, no solver's output fails it on any problem
+where it claimed optimal (finding 2; for OSQP one condition is mostly undetermined, and
+HiGHS's evaluated gate is one it enforces itself). The failure counts in certkkt's
+uniform measure (finding 3) are therefore a statement about that measure, not about the
+solvers keeping their promises, and they need no exact arithmetic (finding 4).
 
 Maros-Meszaros subset at solver defaults (n = 40 problems per solver; nominal 95% Wilson
 intervals, see section 6):
@@ -50,12 +51,13 @@ intervals, see section 6):
 | HiGHS | 29/40 = 73% [57, 84] | 39/40 | 0/39 = 0% [0, 9] | 25/39 (1e-7) | 23/40 = 58% [42, 71] | 5/40 = 13% [5, 26] |
 | Clarabel | 23/40 = 58% [42, 71] | 40/40 | 0/40 = 0% [0, 9] | 10/40 (1e-8) | 37/40 = 93% [80, 97] | 30/40 = 75% [60, 86] |
 | SCS | 22/40 = 55% [40, 69] | 40/40 | 0/40 = 0% [0, 9] | 10/40 (1e-4) | 16/40 = 40% [26, 55] | 7/40 = 18% [9, 32] |
-| OSQP | 19/40 = 48% [33, 63] | 33/40 | 0/33 = 0% [0, 10] | 12/33 (1e-3) | 3/40 = 8% [3, 20] | 0/40 = 0% [0, 9] |
+| OSQP | 19/40 = 48% [33, 63] | 33/40 | 0/33 = 0% [0, 10]; 29 undetermined | 12/33 (1e-3) | 3/40 = 8% [3, 20] | 0/40 = 0% [0, 9] |
 
 "Exact optimum" means the repairs found an exactly feasible primal-dual pair with gap
 exactly zero (an exact rational optimum). "Broke its own stopping rule": the solver
 claimed optimal, yet its returned output fails a condition of the test it stops on
-(section 2.1), in exact arithmetic. "Misses certkkt's measure": some exact relative
+(section 2.1), in exact arithmetic; "undetermined": the exact verdict depends on a
+quantity the solver does not return. "Misses certkkt's measure": some exact relative
 residual (primal, dual, gap; DESIGN 3.2) exceeds the value of the solver's documented
 default tolerance; "certified at eps" means all three are at most eps.
 
@@ -75,18 +77,27 @@ default tolerance; "certified at eps" means all three are at most eps.
    optima they found an exactly feasible primal-dual pair bracketing the optimum
    (`bounded`) for all 72 portfolio units and 16 more Maros-Meszaros units. These counts
    depend on the 30 s repair budget and machine load (section 6).
-2. **No solver broke its own stopping rule.** Each solver's termination test was
-   re-implemented from its source and evaluated exactly on the output it returned
-   (section 2.1). On every unit claiming optimal, every suite and tolerance, the output
-   passes: 0/40 Clarabel, 0/39 HiGHS, 0/40 SCS and 0/33 OSQP on Maros-Meszaros, and 0 of
+2. **No solver's output fails its own stopping rule.** Each solver's termination test
+   was re-implemented from its source and evaluated exactly on the output it returned
+   (section 2.1). On no unit claiming optimal, in any suite or tolerance, does the output
+   fail it: 0/40 Clarabel, 0/39 HiGHS, 0/40 SCS and 0/33 OSQP on Maros-Meszaros, and 0 of
    the 3 Clarabel and 4 SCS CBLIB units and the 24 Clarabel and 24 SCS portfolio units.
-   No verdict was undetermined. The margins are small where the solver checks often: the
-   largest value/threshold ratio is 0.994 (OSQP), 0.974 (SCS), 0.924 (HiGHS) and 0.853
-   (Clarabel) on Maros-Meszaros. The solvers' own float reports of the same quantities
-   differ from the exact values by at most 0.4% of the threshold, so exact arithmetic
-   changes no verdict here either. As expected, the 5 OSQP units that stopped on an
-   iteration cap or claimed dual infeasibility fail its rule, and the 3 "inaccurate"
-   units (2 OSQP, 1 Clarabel) pass the reduced one.
+   Two qualifications. OSQP passes exactly on only 4 of its 33: on the other 29 its dual
+   residual and gap pass exactly, but its primal residual is measured against an
+   internal iterate it does not return, and the exact verdict depends on that iterate
+   (undetermined); OSQP's own float report of that residual passes on all 29. HiGHS's
+   active-set solver stops on a stationarity test on its own working set, which is not
+   evaluated; what is evaluated is the bound and dual-sign gate HiGHS applies after it,
+   which turns any failure into a solve error, so a returned "Optimal" passes it in
+   floats by construction and 0/39 only confirms that rounding changes nothing. The
+   margins are small where the solver checks often: the largest value/threshold ratio is
+   0.994 (OSQP), 0.974 (SCS), 0.924 (HiGHS) and 0.853 (Clarabel) on Maros-Meszaros (for
+   OSQP's primal residual, at the nearest admissible iterate). The solvers' own float
+   reports of the same quantities differ from the exact values by at most 0.4% of the
+   threshold, so exact arithmetic changes no verdict here either. As expected, the 5
+   OSQP units that stopped on an iteration cap or claimed dual infeasibility fail its
+   rule; of the 3 "inaccurate" units, Clarabel's passes the reduced one and OSQP's 2 pass
+   it on dual residual and gap, primal undetermined.
 3. **certkkt's uniform measure is stricter where the solvers normalise differently.**
    Among units claiming optimal, certkkt's measure at the value of each solver's default
    tolerance is missed by 10/40 Clarabel, 25/39 HiGHS, 10/40 SCS and 12/33 OSQP units.
@@ -94,8 +105,10 @@ default tolerance; "certified at eps" means all three are at most eps.
    scale differently: certkkt divides the dual residual by `1 + ||q||` and the gap by
    `1 + |pobj| + |dobj|`; OSQP and SCS divide by the largest term (`||P x||`, `||A'y||`;
    `|x'P x|`, `|q'x|`, the dual term), Clarabel by sums of 2-norms that include `|x|` and
-   `|z|`, and HiGHS's QP gate tests neither stationarity nor the gap (only bound and dual
-   sign feasibility, both at 1e-7). The 2026-11-12 audit's count for OSQP holds: 35 of the
+   `|z|`, and HiGHS's active-set solver tests stationarity only through its search
+   direction on its working set (`||p||_2 < 1e-11`, a step, not a residual), on a
+   Hessian regularised by 1e-7, and tests no gap; its 1e-7 tolerances apply to bound and
+   dual-sign feasibility. The 2026-11-12 audit's count for OSQP holds: 35 of the
    37 OSQP units failing 1e-6 bind on the dual residual (19) or the gap (16). At 1e-6, the
    exact residuals exceed the threshold for 3/40 Clarabel, 16/39 HiGHS, 24/40 SCS and
    30/33 OSQP units claiming optimal; over all default units failing 1e-6 the binding
@@ -128,13 +141,16 @@ default tolerance; "certified at eps" means all three are at most eps.
 [src/certkkt/own_tests.py](src/certkkt/own_tests.py) re-implements each solver's
 termination test from its source, for the versions run (OSQP C 1.0.0 as bundled by
 osqp 1.1.3, `src/auxil.c`; SCS C 3.3.1 at commit cc244eb, `src/scs.c`; Clarabel 0.11.1,
-`info.rs`; HiGHS 1.15.1, `Highs::callSolveQp`, `checkOptimality`, `getKktFailures`), with
-its norms, unscaling and default tolerances (DESIGN 3.5 gives the conditions and file
-citations). It evaluates them exactly on the doubles the solver was given and the vectors
-it returned. Two conditions cannot be evaluated from the output: OSQP's primal residual
-uses an internal iterate `z` it does not return, so a primal failure is counted only if
-it fails for every `z` in `[l, u]` (none did, and no verdict was left undetermined); and
-Clarabel's `kappa/tau <= 1` is internal to its embedding. The vectors are not in
+`info.rs`; HiGHS 1.15.1, `quass.cpp`, `Highs::callSolveQp`, `checkOptimality`,
+`getKktFailures`), with its norms, unscaling and default tolerances (DESIGN 3.5 gives the
+conditions and file citations). It evaluates them exactly on the doubles the solver was
+given and the vectors it returned. Three conditions cannot be decided from the output.
+OSQP's primal residual uses an internal iterate `z` it does not return, so it counts as
+passing only if it passes for every `z` in `[l, u]` and as failing only if it fails for
+every one; otherwise it is undetermined, with OSQP's own float report kept beside it
+(31 units: 29 claiming optimal and 2 inaccurate, all passing by that report). Clarabel's
+`kappa/tau <= 1` is internal to its embedding. HiGHS's active-set stop needs its working
+set and regularised Hessian, so only the gate it applies afterwards is evaluated. The vectors are not in
 `quick-units.jsonl`, so `certkkt study own-tests` re-solved all 216 Clarabel, HiGHS, OSQP
 and SCS units with their recorded settings; all 216 reproduced the recorded status, raw
 status, iteration count and objective bit for bit (once SCS's BLAS ran single-threaded,

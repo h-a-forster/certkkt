@@ -83,7 +83,8 @@ Status (2026-11-13): v0.1.0 plus own stopping rules. Library, CLI, plugin and ad
 done and tested; quick study run, reported in REPORT.md and reproduced by a rerun
 (`docs/results/quick-rerun.md`); each solver's own stopping rule evaluated exactly on all
 216 Clarabel, HiGHS, OSQP and SCS quick units (`docs/results/quick-own-tests.jsonl`; no
-unit claiming optimal fails its own rule). The full
+unit claiming optimal fails its own rule; OSQP's primal condition is undetermined on 29 of
+its 33, DESIGN 3.5). The full
 study was started and stopped by owner decision at 348/3093 units (all Maros-Meszaros; 28
 hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, its own
 projection then about 50 more hours (`runs/full/progress.log`); it is not reported.

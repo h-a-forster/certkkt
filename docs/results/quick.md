@@ -93,7 +93,7 @@ same units. Largest ratio: largest value/threshold over the rule's conditions.
 | cblib | scs | default | 4 | 0/4 = 0% [0, 49] | 0 | 1/4 = 25% [5, 70] | 0.997 | primal residual 2, dual residual 2 |
 | mm | clarabel | default | 40 | 0/40 = 0% [0, 9] | 0 | 10/40 = 25% [14, 40] | 0.853 | duality gap 33, dual residual 6, primal residual 1 |
 | mm | highs | default | 39 | 0/39 = 0% [0, 9] | 0 | 25/39 = 64% [48, 77] | 0.924 | primal feasibility 34, dual feasibility 5 |
-| mm | osqp | default | 33 | 0/33 = 0% [0, 10] | 0 | 12/33 = 36% [22, 53] | 0.994 | duality gap 19, dual residual 9, primal residual 5 |
+| mm | osqp | default | 33 | 0/33 = 0% [0, 10] | 29 | 12/33 = 36% [22, 53] | 0.994 | duality gap 19, dual residual 9, primal residual 5 |
 | mm | scs | default | 40 | 0/40 = 0% [0, 9] | 0 | 10/40 = 25% [14, 40] | 0.974 | dual residual 15, primal residual 13, duality gap 12 |
 | portfolio | clarabel | default | 6 | 0/6 = 0% [0, 39] | 0 | 5/6 = 83% [44, 97] | 0.851 | primal residual 6 |
 | portfolio | clarabel | 1e-4 | 6 | 0/6 = 0% [0, 39] | 0 | 6/6 = 100% [61, 100] | 0.855 | primal residual 6 |
@@ -104,6 +104,7 @@ same units. Largest ratio: largest value/threshold over the rule's conditions.
 | portfolio | scs | 1e-6 | 6 | 0/6 = 0% [0, 39] | 0 | 1/6 = 17% [3, 56] | 0.366 | dual residual 6 |
 | portfolio | scs | 1e-8 | 6 | 0/6 = 0% [0, 39] | 0 | 1/6 = 17% [3, 56] | 0.967 | dual residual 6 |
 
-Units not claiming optimal, against the rule of the status they claim (reduced tolerances for 'inaccurate' where the solver has them): cblib/sched_50_50_orig/clarabel/default (inaccurate) passes, mm/PRIMALC1/osqp/default (max_iter) fails, mm/PRIMALC2/osqp/default (max_iter) fails, mm/PRIMALC5/osqp/default (dual_infeasible) fails, mm/QBORE3D/osqp/default (max_iter) fails, mm/QSCTAP1/osqp/default (inaccurate) passes, mm/QSHARE1B/osqp/default (max_iter) fails, mm/QSHARE2B/osqp/default (inaccurate) passes.
+Units not claiming optimal, against the rule of the status they claim (reduced tolerances for 'inaccurate' where the solver has them): cblib/sched_50_50_orig/clarabel/default (inaccurate) passes, mm/PRIMALC1/osqp/default (max_iter) fails, mm/PRIMALC2/osqp/default (max_iter) fails, mm/PRIMALC5/osqp/default (dual_infeasible) fails, mm/QBORE3D/osqp/default (max_iter) fails, mm/QSCTAP1/osqp/default (inaccurate) undetermined, mm/QSHARE1B/osqp/default (max_iter) fails, mm/QSHARE2B/osqp/default (inaccurate) undetermined.
+Undetermined on 31 units (a condition needs a quantity the solver does not return); on 31 of them the solver's own float report of that quantity passes the condition.
 On the units claiming optimal, the solvers' own float reports of the same quantities differ from the exact values by at most 3.8e-03 of the threshold (482 comparisons).
 

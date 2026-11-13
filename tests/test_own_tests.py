@@ -45,8 +45,13 @@ def test_converged_runs_pass_their_own_rule_and_match_the_solver_report(name, ma
     res = _solve(name, make())
     assert res.status == "optimal"
     t = own_test(res)
-    assert t.passes is True, t.to_dict()
+    assert t.passes is not False, t.to_dict()
     for c in t.criteria:
+        if c.passes is None:  # only OSQP's primal residual needs a quantity not returned
+            assert (name, c.name) == ("osqp", "primal residual"), t.to_dict()
+            assert t.diagnostics["undetermined_by_solver_report"][c.name]["passes"] is True
+        else:
+            assert c.passes is True, t.to_dict()
         key = SELF_REPORT[name].get(c.name)
         if key is None:
             continue
@@ -70,13 +75,14 @@ def _with_output(res: SolverResult, **output) -> SolverResult:
     return dataclasses.replace(res, native=nat)
 
 
-def test_highs_gate_is_bound_and_sign_feasibility_only():
+def test_highs_gate_evaluated_is_bound_and_sign_feasibility():
     res = _solve("highs", boxed_qp())
     out = res.native.output
     lo, up = res.native.data["col_lower"], res.native.data["col_upper"]
     j = int(np.flatnonzero(np.isfinite(lo))[0])
-    # Stationarity is not part of HiGHS's QP gate: a dual off by 1 with the right sign
-    # for its side of the bound interval passes ...
+    # The gate HiGHS applies after its active-set solver (whose own stop on the working
+    # set is not evaluated) does not test stationarity: a dual off by 1 with the right
+    # sign for its side of the bound interval passes ...
     below_middle = not np.isfinite(up[j]) or out["col_value"][j] < (lo[j] + up[j]) / 2
     dual = out["col_dual"].copy()
     dual[j] += 1.0 if below_middle else -1.0
@@ -88,7 +94,7 @@ def test_highs_gate_is_bound_and_sign_feasibility_only():
     assert t.passes is False and t.binding == "primal feasibility"
 
 
-def test_osqp_primal_rule_fails_only_when_no_internal_iterate_could_pass():
+def test_osqp_primal_rule_is_decided_only_when_every_internal_iterate_agrees():
     # min x^2 s.t. 0 <= x <= 1 (one row): OSQP's z is not returned, only z in [0, 1].
     nat = NativeRun(
         form="box",
@@ -104,13 +110,15 @@ def test_osqp_primal_rule_fails_only_when_no_internal_iterate_could_pass():
         settings={"eps_abs": 1e-3, "eps_rel": 1e-3, "scaling": 10, "check_dualgap": 0},
     )
 
-    def verdict(x: float, y: float = 0.0) -> bool | None:
-        out = {"x": np.array([x]), "y": np.array([y])}
+    def verdict(x: float, lo: float = 0.0) -> bool | None:
+        out = {"x": np.array([x]), "y": np.zeros(1)}
         r = SolverResult("osqp", "", "optimal", "", x=out["x"], z=out["y"])
-        r.native = dataclasses.replace(nat, output=out)
+        r.native = dataclasses.replace(nat, output=out, data={**nat.data, "l": np.array([lo])})
         return next(c for c in own_test(r).criteria if c.name == "primal residual").passes
 
-    assert verdict(1.0005) is True  # 5e-4 < 1e-3 + 1e-3 * 1.0005
+    # Passes at z = 1 (5e-4 < 1e-3 + 1e-3 * 1.0005), fails at z = 0: undetermined.
+    assert verdict(1.0005) is None
+    assert verdict(1.0005, lo=1.0) is True  # z pinned to 1
     assert verdict(1.01) is False  # 1e-2 >= every threshold any z in [0, 1] allows
 
 

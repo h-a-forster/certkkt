@@ -63,7 +63,8 @@
    "ci95": [
     0.0,
     0.5614970317550454
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "cblib/ecos/default": {
@@ -189,7 +190,8 @@
    "ci95": [
     0.0,
     0.4898908364545972
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "mm/clarabel/default": {
@@ -256,7 +258,8 @@
    "ci95": [
     0.0,
     0.0876216011972866
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "mm/highs/default": {
@@ -323,7 +326,8 @@
    "ci95": [
     0.0,
     0.08966685370757138
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "mm/osqp/default": {
@@ -390,7 +394,8 @@
    "ci95": [
     0.0,
     0.10426999754245202
-   ]
+   ],
+   "undetermined": 29
   }
  },
  "mm/scs/default": {
@@ -457,7 +462,8 @@
    "ci95": [
     0.0,
     0.0876216011972866
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/clarabel/1e-4": {
@@ -524,7 +530,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/clarabel/1e-6": {
@@ -591,7 +598,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/clarabel/1e-8": {
@@ -658,7 +666,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/clarabel/default": {
@@ -725,7 +734,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/ecos/1e-4": {
@@ -1028,7 +1038,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/scs/1e-6": {
@@ -1095,7 +1106,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/scs/1e-8": {
@@ -1162,7 +1174,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  },
  "portfolio/scs/default": {
@@ -1229,7 +1242,8 @@
    "ci95": [
     0.0,
     0.39033428790216523
-   ]
+   ],
+   "undetermined": 0
   }
  }
 }

@@ -21,7 +21,8 @@ unless stated):
   |S(y)|)`` with ``S(y) = u'max(y, 0) + l'min(y, 0)`` after projecting ``y`` onto the
   polar of the recession cone of ``[l, u]``. ``z`` is OSQP's internal projected iterate,
   which it does not return; all that is known is ``z`` in ``[l, u]``, so the primal test
-  fails only if it fails for every such ``z``, and passes if it passes for the nearest one
+  passes only if it passes for every such ``z`` and fails only if it fails for every one;
+  otherwise it is undetermined, and OSQP's own float ``prim_res`` is kept as a diagnostic
   (see :func:`_osqp`). Status "solved inaccurate" uses 10x the tolerances.
 - **SCS 3.3.1** (C source at commit cc244eb, bundled by scs-python 3.3.1;
   ``has_converged`` in ``src/scs.c``, defaults ``eps_abs = eps_rel = 1e-4``):
@@ -36,14 +37,20 @@ unless stated):
   min(|p|, |d|)) < tol_gap_rel``. Its presolve drops nonnegative rows with ``b`` at
   infinity (``1e20``) first. The fourth condition, ``kappa / tau <= 1``, is internal to
   the homogeneous embedding and is not evaluated.
-- **HiGHS 1.15.1, QP path** (``Highs::callSolveQp`` then ``Highs::checkOptimality`` and
-  ``getKktFailures`` in ``HighsSolution.cpp``, ``primal_feasibility_tolerance =
-  dual_feasibility_tolerance = 1e-7``): "Optimal" stands only if no column value or row
-  activity violates a bound by more than the primal tolerance and no column or row dual
-  has the wrong sign by more than the dual tolerance (the side is decided by which half of
-  the bound interval the value lies in). Stationarity and complementarity are not part of
-  this gate. Row activities are taken as ``A x`` evaluated exactly; the activities HiGHS
-  returned are tested too and reported as a diagnostic.
+- **HiGHS 1.15.1, QP path**, in two stages. (1) The active-set solver
+  (``highs/qpsolver/quass.cpp``) declares optimal only at a point it finds stationary on
+  its working set (search direction ``||p||_2 < 1e-11``, or a zero step) where pricing
+  finds no multiplier to release beyond ``dual_feasibility_tolerance``, for its internal
+  Hessian ``P + qp_regularization_value I`` (``1e-7``). That needs the working set and is
+  not evaluated. (2) ``Highs::checkOptimality`` and ``getKktFailures``
+  (``HighsSolution.cpp``, ``primal_feasibility_tolerance = dual_feasibility_tolerance =
+  1e-7``) then keep "Optimal" only if no column value or row activity violates a bound by
+  more than the primal tolerance and no column or row dual has the wrong sign by more than
+  the dual tolerance (the side is decided by which half of the bound interval the value
+  lies in); otherwise the status becomes a solve error. This gate is what is evaluated, so
+  a returned "Optimal" passes it in floats by construction and the exact evaluation tests
+  only rounding. Row activities are taken as ``A x`` evaluated exactly; the activities
+  HiGHS returned are tested too and reported as a diagnostic.
 """
 
 from __future__ import annotations
@@ -230,23 +237,30 @@ def _osqp(nat: NativeRun, claim: str) -> OwnTest:
 
     # primal residual over every internal z in [l, u]. (The sign of y does not pin z to a
     # bound: OSQP updates y by a sum, so y_i can be a rounding residue where z_i is
-    # interior.) z0 = proj(A x) minimises every |A x - z|_i, so r(z) >= r0 for all z, and
-    # ||z|| <= ||A x|| + r(z) bounds the threshold: if r0 (1 - eps_rel) >= eps_abs +
-    # eps_rel ||A x||, no z passes.
+    # interior.) The threshold is at least eps_abs + eps_rel ||A x|| for every z. It
+    # passes for every z if even the farthest z in [l, u] (r_max) beats that bound. z0 =
+    # proj(A x) minimises every |A x - z|_i, so r(z) >= r0 for all z, and ||z|| <= ||A x||
+    # + r(z): if r0 (1 - eps_rel) >= eps_abs + eps_rel ||A x||, no z passes. In between
+    # the exact decision depends on z and is undetermined.
     lo_inf = lo_f <= -inf
     up_inf = up_f >= inf
     lo = [None if li else to_q(float(v)) for v, li in zip(lo_f, lo_inf, strict=True)]
     up = [None if ui else to_q(float(v)) for v, ui in zip(up_f, up_inf, strict=True)]
     lo_c = [to_q(-inf) if v is None else v for v in lo]  # OSQP holds infinite bounds as 1e30
     up_c = [to_q(inf) if v is None else v for v in up]
+    diagnostics: dict[str, Any] = {}
     if A.shape[0]:
         z0 = [min(max(ax, lc), uc) for ax, lc, uc in zip(Ax, lo_c, up_c, strict=True)]
         r0 = max_abs([a - z for a, z in zip(Ax, z0, strict=True)])
+        r_max = max(
+            (max(abs(a - lc), abs(a - uc)) for a, lc, uc in zip(Ax, lo_c, up_c, strict=True)),
+            default=ZERO,
+        )
         nAx = max_abs(Ax)
-        eps_prim0 = eps_abs + eps_rel * max(max_abs(z0), nAx)
-        if r0 < eps_prim0:
+        thr_low = eps_abs + eps_rel * nAx
+        if r_max < thr_low:
             verdict: bool | None = True
-        elif eps_rel < 1 and r0 * (1 - eps_rel) >= eps_abs + eps_rel * nAx:
+        elif eps_rel < 1 and r0 * (1 - eps_rel) >= thr_low:
             verdict = False
         else:
             verdict = None
@@ -254,11 +268,23 @@ def _osqp(nat: NativeRun, claim: str) -> OwnTest:
             _crit(
                 "primal residual",
                 r0,
-                eps_prim0,
+                eps_abs + eps_rel * max(max_abs(z0), nAx),
                 verdict,
-                "z unknown: value at z = proj(A x); fails only if every z in [l, u] fails",
+                "z unknown: value and threshold at z = proj(A x) (a lower bound on the "
+                "value); passes only if every z in [l, u] passes, fails only if every z fails",
             )
         )
+        if verdict is None and "prim_res" in nat.info:
+            # OSQP's own float report of r(z) for its z, against the lower bound of the
+            # threshold: a pass here holds whatever ||z|| is.
+            rep = to_q(abs(float(nat.info["prim_res"])))
+            diagnostics["undetermined_by_solver_report"] = {
+                "primal residual": {
+                    "reported": _f(rep),
+                    "threshold_lower_bound": _f(thr_low),
+                    "passes": bool(rep < thr_low),
+                }
+            }
 
     # duality gap
     if st.get("check_dualgap"):
@@ -298,6 +324,7 @@ def _osqp(nat: NativeRun, claim: str) -> OwnTest:
             "OSQP rounds |y_i| <= 1e-15 (scaled) to zero inside the gap's support function"
         ],
         solver_report=dict(nat.info),
+        diagnostics=diagnostics,
     )
 
 
@@ -474,7 +501,10 @@ def _highs(nat: NativeRun, claim: str) -> OwnTest:
         RULES["highs"],
         "full",
         criteria,
-        not_evaluated=["stationarity and complementarity: not part of HiGHS's QP optimality gate"],
+        not_evaluated=[
+            "the active-set solver's own stop (zero search direction on its working set, "
+            "no multiplier to release) on its regularised Hessian: needs the working set"
+        ],
         solver_report=dict(nat.info),
         diagnostics={
             "with_reported_row_values": {

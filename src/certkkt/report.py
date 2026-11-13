@@ -102,7 +102,12 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
         claims = [r for r in recs if _status(r) == "optimal" and own_rule(r) is not None]
         if claims:
             k = sum(broke_own_rule(r) for r in claims)
-            row["broke_own_rule"] = {"k": k, "n": len(claims), "ci95": list(wilson(k, len(claims)))}
+            row["broke_own_rule"] = {
+                "k": k,
+                "n": len(claims),
+                "ci95": list(wilson(k, len(claims))),
+                "undetermined": sum(own_rule(r)["passes"] is None for r in claims),
+            }
         out[f"{suite}/{solver}/{tol}"] = row
     return out
 
@@ -285,6 +290,9 @@ def broke_own_rule(rec: dict[str, Any]) -> bool:
     return _status(rec) == "optimal" and o is not None and o["passes"] is False
 
 
+_VERDICT = {True: "passes", False: "fails", None: "undetermined"}
+
+
 def _own_rule_section(records: list[dict[str, Any]]) -> list[str]:
     evaluated = [r for r in records if r.get("own_test")]
     if not evaluated:
@@ -333,10 +341,23 @@ def _own_rule_section(records: list[dict[str, Any]]) -> list[str]:
             "Units not claiming optimal, against the rule of the status they claim "
             "(reduced tolerances for 'inaccurate' where the solver has them): "
             + ", ".join(
-                f"{r['key']} ({_status(r)}) {'passes' if own_rule(r)['passes'] else 'fails'}"
+                f"{r['key']} ({_status(r)}) {_VERDICT[own_rule(r)['passes']]}"
                 for r in sorted(others, key=lambda r: r["key"])
             )
             + "."
+        )
+    undet = [r for r in evaluated if own_rule(r) is not None and own_rule(r)["passes"] is None]
+    if undet:
+        by_report = [
+            r
+            for r in undet
+            if (by := own_rule(r)["diagnostics"].get("undetermined_by_solver_report"))
+            and all(v["passes"] for v in by.values())
+        ]
+        lines.append(
+            f"Undetermined on {len(undet)} units (a condition needs a quantity the solver "
+            f"does not return); on {len(by_report)} of them the solver's own float report "
+            "of that quantity passes the condition."
         )
     unavailable = [r for r in evaluated if own_rule(r) is None]
     if unavailable:

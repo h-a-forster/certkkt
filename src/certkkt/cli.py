@@ -176,7 +176,15 @@ def cmd_study(args: argparse.Namespace) -> int:
             max_units=args.max_units,
         )
         return 0
-    path = run_dir / "units.jsonl"
+    path = Path(args.units) if args.units else run_dir / "units.jsonl"
+    if args.action == "own-tests":
+        if not path.exists():
+            print(f"no records at {path}", file=sys.stderr)
+            return 1
+        study.rerun_own_tests(
+            path, Path(args.out_dir or f"{run_dir}-own"), data_root=Path(args.data)
+        )
+        return 0
     if not path.exists():
         print(f"no records at {path}", file=sys.stderr)
         return 1
@@ -189,6 +197,8 @@ def cmd_study(args: argparse.Namespace) -> int:
         return 0
     from certkkt.report import markdown, summarise
 
+    if args.own_tests:
+        records = study.merge_own_tests(records, study.read_records(Path(args.own_tests)))
     text = markdown(records, title=f"certkkt study: {args.profile} profile")
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -246,7 +256,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("fetch", help="download benchmark data (checksummed)")
     sp.add_argument("suites", nargs="+", choices=("mm", "cblib", "mittelmann", "french"))
-    sp.add_argument("--only", nargs="*", help="restrict to these file names")
+    sp.add_argument(
+        "--only", nargs="+", action="extend", help="restrict to these file names (repeatable)"
+    )
     sp.add_argument("--data", default="data")
     sp.add_argument(
         "--accept-new-data",
@@ -257,7 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_fetch)
 
     sp = sub.add_parser("study", help="run, inspect or report the certification study")
-    sp.add_argument("action", choices=("run", "status", "report"))
+    sp.add_argument("action", choices=("run", "status", "report", "own-tests"))
     sp.add_argument("--profile", default="quick", choices=("quick", "full"))
     sp.add_argument("--suite", action="append", choices=("mm", "cblib", "portfolio", "mittelmann"))
     sp.add_argument("--run-dir", help="default runs/<profile>")
@@ -266,6 +278,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--max-units", type=int, help="stop after this many new units")
     sp.add_argument("--out", help="report: write markdown here")
     sp.add_argument("--json", help="report: write the summary JSON here")
+    sp.add_argument("--units", help="report, own-tests: read units from this file instead")
+    sp.add_argument(
+        "--own-tests",
+        help="report: merge the own-stopping-rule records written by 'study own-tests'",
+    )
+    sp.add_argument("--out-dir", help="own-tests: output directory (default <run-dir>-own)")
     sp.set_defaults(func=cmd_study)
     return p
 

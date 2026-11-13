@@ -133,9 +133,42 @@ def test_study_checkpoints_and_resumes(tmp_path, data_root):
     assert len(keys) == len(set(keys)) == 5
     calls = json.loads((run / "manifest.json").read_text())["calls"]
     assert [c["profile"] for c in calls] == ["quick", "quick"]
-    text = markdown(study.read_records(run / "units.jsonl"))
+    recs = study.read_records(run / "units.jsonl")
+    ruled = [r for r in recs if r["solver"] in ("clarabel", "scs")]
+    assert ruled and all(r["own_test"]["passes"] is True for r in ruled)
+    text = markdown(recs)
     assert "| portfolio | clarabel |" in text
-    assert summarise(study.read_records(run / "units.jsonl"))
+    assert "| portfolio | clarabel | default | 1 | 0/1 = 0%" in text  # own-rule table
+    assert summarise(recs)
+
+
+@pytest.mark.slow
+def test_own_tests_rerun_reproduces_and_merges_into_the_report(tmp_path, data_root):
+    run = tmp_path / "run"
+    study.run_study(
+        "quick",
+        ("portfolio",),
+        run_dir=run,
+        data_root=data_root,
+        workers=1,
+        max_units=2,
+        echo=lambda s: None,
+    )
+    units = study.read_records(run / "units.jsonl")
+    stripped = [{k: v for k, v in r.items() if k != "own_test"} for r in units]
+    assert (
+        study.rerun_own_tests(
+            run / "units.jsonl", tmp_path / "own", data_root=data_root, echo=lambda s: None
+        )
+        == 2
+    )
+    own = study.read_records(tmp_path / "own" / "own-tests.jsonl")
+    assert all(o["reproduced"] for o in own)
+    merged = study.merge_own_tests(stripped, own)
+    assert [m["own_test"] for m in merged] == [r["own_test"] for r in units]
+    # A re-solve that did not reproduce the recorded run gives no own-rule verdict.
+    own[0] = {**own[0], "reproduced": False, "mismatch": {"iterations": [1, 2]}}
+    assert "unavailable" in study.merge_own_tests(stripped, own)[0]["own_test"]
 
 
 @pytest.mark.slow

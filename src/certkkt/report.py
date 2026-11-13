@@ -99,6 +99,10 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
                 row[f"{name}@{eps}"] = {"k": k, "p": k / n if n else None, "ci95": [lo, hi]}
         k = sum(exactly_optimal(r) for r in recs)
         row["exactly_optimal"] = {"k": k, "ci95": list(wilson(k, n))}
+        claims = [r for r in recs if _status(r) == "optimal" and own_rule(r) is not None]
+        if claims:
+            k = sum(broke_own_rule(r) for r in claims)
+            row["broke_own_rule"] = {"k": k, "n": len(claims), "ci95": list(wilson(k, len(claims)))}
         out[f"{suite}/{solver}/{tol}"] = row
     return out
 
@@ -233,6 +237,8 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
             )
         lines.append("")
 
+    lines += _own_rule_section(records)
+
     mitt = [r for r in records if r.get("suite") == "mittelmann"]
     if mitt:
         lines += [
@@ -252,6 +258,112 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
             )
         lines.append("")
     return "\n".join(lines)
+
+
+#: The solver's float report of each own-rule criterion, where it gives the same quantity.
+#: OSQP's primal residual is left out: it uses an internal iterate certkkt cannot see.
+SELF_REPORT = {
+    "clarabel": {"primal residual": "r_prim", "dual residual": "r_dual"},
+    "scs": {"primal residual": "res_pri", "dual residual": "res_dual", "duality gap": "gap"},
+    "osqp": {"dual residual": "dual_res", "duality gap": "duality_gap"},
+    "highs": {
+        "primal feasibility": "max_primal_infeasibility",
+        "dual feasibility": "max_dual_infeasibility",
+    },
+}
+
+
+def own_rule(rec: dict[str, Any]) -> dict[str, Any] | None:
+    """The record's own-stopping-rule evaluation, or None if there is none."""
+    o = rec.get("own_test")
+    return o if o and "unavailable" not in o else None
+
+
+def broke_own_rule(rec: dict[str, Any]) -> bool:
+    """Claims optimal, yet its output fails the solver's own stopping rule exactly."""
+    o = own_rule(rec)
+    return _status(rec) == "optimal" and o is not None and o["passes"] is False
+
+
+def _own_rule_section(records: list[dict[str, Any]]) -> list[str]:
+    evaluated = [r for r in records if r.get("own_test")]
+    if not evaluated:
+        return []
+    lines = [
+        "## Each solver against its own stopping rule",
+        "",
+        "Each solver's own termination test (certkkt.own_tests: its residual definitions,",
+        "norms, scaling and default tolerances, from its source) evaluated in exact",
+        "arithmetic on the data it was given and the output it returned. 'Broke own rule':",
+        "claims optimal, yet a condition of its own test fails exactly. 'Misses certkkt",
+        "at own tol': the uniform yardstick at the value of the solver's default tolerance,",
+        "same units. Largest ratio: largest value/threshold over the rule's conditions.",
+        "",
+        "| suite | solver | tol | claims optimal | broke own rule | undetermined "
+        "| misses certkkt at own tol | largest ratio | binding condition |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    tol_order = {t: i for i, t in enumerate(("default", "1e-4", "1e-6", "1e-8"))}
+    groups = _group(evaluated, "suite", "solver", "tol")
+    for (suite, solver, tol), recs in sorted(
+        groups.items(), key=lambda kv: (kv[0][0], kv[0][1], tol_order.get(kv[0][2], 9))
+    ):
+        claims = [r for r in recs if _status(r) == "optimal" and own_rule(r) is not None]
+        n = len(claims)
+        if not n:
+            continue
+        undet = sum(own_rule(r)["passes"] is None for r in claims)
+        t = default_tol(solver) if tol == "default" else tol
+        miss = fmt_share(sum(not asis_ok(r, t) for r in claims), n) if t else "-"
+        ratios = [max(c["ratio"] for c in own_rule(r)["criteria"]) for r in claims]
+        binding: dict[str, int] = defaultdict(int)
+        for r in claims:
+            binding[own_rule(r)["binding"]] += 1
+        lines.append(
+            f"| {suite} | {solver} | {tol} | {n} | "
+            f"{fmt_share(sum(broke_own_rule(r) for r in claims), n)} | {undet} | {miss} | "
+            f"{max(ratios):.3f} | "
+            + ", ".join(f"{k} {v}" for k, v in sorted(binding.items(), key=lambda kv: -kv[1]))
+            + " |"
+        )
+    lines.append("")
+    others = [r for r in evaluated if _status(r) != "optimal" and own_rule(r) is not None]
+    if others:
+        lines.append(
+            "Units not claiming optimal, against the rule of the status they claim "
+            "(reduced tolerances for 'inaccurate' where the solver has them): "
+            + ", ".join(
+                f"{r['key']} ({_status(r)}) {'passes' if own_rule(r)['passes'] else 'fails'}"
+                for r in sorted(others, key=lambda r: r["key"])
+            )
+            + "."
+        )
+    unavailable = [r for r in evaluated if own_rule(r) is None]
+    if unavailable:
+        lines.append(
+            f"Own rule not evaluated on {len(unavailable)} units: "
+            + "; ".join(f"{r['key']}: {r['own_test']['unavailable']}" for r in unavailable[:5])
+            + ("" if len(unavailable) <= 5 else "; ...")
+            + "."
+        )
+    gaps = []
+    for r in evaluated:
+        o = own_rule(r)
+        if o is None or _status(r) != "optimal":
+            continue
+        keys = SELF_REPORT.get(r["solver"], {})
+        for c in o["criteria"]:
+            v = (o.get("solver_report") or {}).get(keys.get(c["name"], ""))
+            if v is not None and c["threshold"] > 0:
+                gaps.append(abs(abs(v) - c["value"]) / c["threshold"])
+    if gaps:
+        lines.append(
+            f"On the units claiming optimal, the solvers' own float reports of the same "
+            f"quantities differ from the exact values by at most {max(gaps):.1e} of the "
+            f"threshold ({len(gaps)} comparisons)."
+        )
+    lines.append("")
+    return lines
 
 
 def _paired(default: list[dict[str, Any]]) -> list[str]:
@@ -297,4 +409,4 @@ def _q3(vals: list[float]) -> str:
     return f"{quantile(vals, 0.5):.1f} [{quantile(vals, 0.25):.1f}, {quantile(vals, 0.75):.1f}]"
 
 
-__all__ = ["EPS", "asis_ok", "markdown", "repaired_ok", "summarise"]
+__all__ = ["EPS", "asis_ok", "broke_own_rule", "markdown", "repaired_ok", "summarise"]

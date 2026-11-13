@@ -86,6 +86,13 @@ def test_malformed_require_eps_is_a_usage_error(tmp_path, lp_file):
     assert exc.value.code == 2
 
 
+def test_fetch_only_accumulates_when_repeated():
+    from certkkt.cli import build_parser
+
+    args = build_parser().parse_args(["fetch", "mittelmann", "--only", "a", "b", "--only", "c"])
+    assert args.only == ["a", "b", "c"]
+
+
 def test_bad_solution_file_is_rejected(tmp_path, lp_file):
     sol = tmp_path / "sol.json"
     sol.write_text(json.dumps({"x": [0.5, 0.5], "z": [1, 0, 0], "y_row": [1]}))

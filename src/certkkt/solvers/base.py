@@ -6,6 +6,10 @@ returns a :class:`SolverResult` whose ``x`` and ``z`` are in the canonical conve
 :mod:`certkkt.problem`: ``P x + q + A'z = 0`` and ``z`` in the dual cone. Adapters never
 alter the solution they receive beyond this convention change (no clipping, no
 projection, no rescaling).
+
+Each adapter also keeps a :class:`NativeRun`: the data exactly as passed to the solver,
+the solver's raw output vectors and the tolerances it ran with, so that
+:mod:`certkkt.own_tests` can evaluate the solver's own stopping rule on its own terms.
 """
 
 from __future__ import annotations
@@ -35,6 +39,27 @@ STATUSES = (
 
 
 @dataclass
+class NativeRun:
+    """What one solver call saw and returned, in the solver's own form and conventions.
+
+    ``form`` names the layout (``"conic"``: ``A x + s = b``, ``s`` in the cones, used by
+    Clarabel and SCS; ``"box"``: ``l <= A x <= u``, used by OSQP; ``"highs"``: column and
+    row bounds). ``data`` holds the float arrays and scipy matrices passed to the solver
+    (the quadratic term as the triangle the solver was given, named in ``data["P_triangle"]``),
+    ``output`` the raw vectors it returned, ``settings`` the termination settings in force
+    (read back from the solver where its API allows), and ``info`` the solver's own float
+    report of its residuals where it gives one. Not serialised: it is input to
+    :func:`certkkt.own_tests.own_test`.
+    """
+
+    form: str
+    data: dict[str, Any]
+    output: dict[str, np.ndarray]
+    settings: dict[str, Any]
+    info: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class SolverResult:
     solver: str
     version: str
@@ -48,6 +73,7 @@ class SolverResult:
     wall_time: float | None = None
     settings: dict[str, Any] = field(default_factory=dict)
     message: str = ""
+    native: NativeRun | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if self.status not in STATUSES:

@@ -261,6 +261,9 @@ def run_unit(unit: Unit, inst: Any, limits: Limits, timings: dict[str, float]) -
         rec["outcome"] = "too_large_for_exact"
         return rec
     t0 = time.perf_counter()
+    rec["own_test"] = own_test_record(res)
+    timings["own_test"] = time.perf_counter() - t0
+    t0 = time.perf_counter()
     cert = certify(prob, x, z)
     timings["certify"] = time.perf_counter() - t0
     rec["as_is"] = cert.to_dict()
@@ -278,6 +281,17 @@ def run_unit(unit: Unit, inst: Any, limits: Limits, timings: dict[str, float]) -
     rec["repair_seconds"] = {k: round(v, 3) for k, v in out.seconds.items()}
     rec["outcome"] = "certified"
     return rec
+
+
+def own_test_record(res: Any) -> dict[str, Any]:
+    """The solver's own stopping rule evaluated exactly (:mod:`certkkt.own_tests`), or
+    ``{"unavailable": reason}``."""
+    from certkkt.own_tests import OwnTestUnavailable, own_test
+
+    try:
+        return own_test(res).to_dict()
+    except OwnTestUnavailable as exc:
+        return {"unavailable": str(exc)}
 
 
 def _worker(conn: Connection, data_root: str) -> None:
@@ -373,8 +387,15 @@ def _finite(v: Any) -> Any:
 class _Sink:
     """Appends records and progress lines, thread-safe, flushed to disk per record."""
 
-    def __init__(self, run_dir: Path, total: int, already: int, echo: Callable[[str], None]):
-        self.units = run_dir / "units.jsonl"
+    def __init__(
+        self,
+        run_dir: Path,
+        total: int,
+        already: int,
+        echo: Callable[[str], None],
+        units_name: str = "units.jsonl",
+    ):
+        self.units = run_dir / units_name
         self.log_path = run_dir / "progress.log"
         self.total = total
         self.done = already
@@ -495,6 +516,103 @@ def run_study(
         raise RuntimeError("a study driver thread failed") from errors[0]
     sink.log(f"finished: {sink.new} new units, {sink.done}/{sink.total} total")
     return sink.new
+
+
+#: Result fields a re-solve must match bit for bit to count as the same run.
+REPRODUCE_FIELDS = ("status", "raw_status", "iterations", "objective")
+
+
+def rerun_own_tests(
+    units_path: Path,
+    out_dir: Path,
+    *,
+    data_root: Path,
+    echo: Callable[[str], None] = print,
+) -> int:
+    """Re-solve the units of an existing study with their recorded settings and evaluate
+    each solver's own stopping rule exactly on the new output.
+
+    The stopping rule needs vectors a units.jsonl does not keep, so each unit is solved
+    again; ``reproduced`` says whether the status, raw status, iteration count and
+    objective match the recorded ones exactly (only then does the evaluation describe the
+    recorded output). Appends one record per unit to ``out_dir/own-tests.jsonl`` and
+    skips keys already there. Returns the number of new records.
+    """
+    # The study's workers run with OMP_NUM_THREADS=1, which SCS's bundled OpenBLAS reads
+    # when it loads; with more threads its sums change order and SCS takes other steps.
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    from certkkt.own_tests import RULES
+    from certkkt.solvers import get_adapter
+
+    records = [
+        r
+        for r in read_records(units_path)
+        if r.get("solver") in RULES and isinstance(r.get("result"), dict)
+    ]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    done = completed_keys(out_dir / "own-tests.jsonl")
+    todo = [r for r in records if r["key"] not in done]
+    sink = _Sink(out_dir, len(records), len(records) - len(todo), echo, "own-tests.jsonl")
+    sink.log(f"own tests from {units_path}: {len(records)} units, todo={len(todo)}")
+    manifest = out_dir / "manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "source": str(units_path),
+                "versions": versions(),
+                "solvers": _solver_versions(),
+                "platform": platform.platform(terse=True),
+                "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            },
+            indent=2,
+        )
+    )
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for r in todo:
+        groups.setdefault((r["suite"], r["instance"]), []).append(r)
+    for (suite, name), recs in groups.items():
+        inst = load_unit_instance(suite, name, data_root)
+        for r in recs:
+            t0 = time.perf_counter()
+            res = get_adapter(r["solver"]).solve(inst, dict(r["result"]["settings"]))
+            new = res.to_dict()
+            mismatch = [k for k in REPRODUCE_FIELDS if new.get(k) != r["result"].get(k)]
+            out: dict[str, Any] = {
+                "key": r["key"],
+                "suite": suite,
+                "instance": name,
+                "solver": r["solver"],
+                "tol": r["tol"],
+                "reproduced": not mismatch,
+                "mismatch": {k: [r["result"].get(k), new.get(k)] for k in mismatch},
+                "result": {k: new.get(k) for k in (*REPRODUCE_FIELDS, "version")},
+            }
+            if res.has_solution:
+                out["own_test"] = own_test_record(res)
+            out["seconds"] = round(time.perf_counter() - t0, 3)
+            sink.record(out)
+    sink.log(f"finished: {sink.new} new, {sink.done}/{sink.total} total")
+    return sink.new
+
+
+def merge_own_tests(
+    records: list[dict[str, Any]], own: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Copies of ``records`` carrying the ``own_test`` of a reproduced re-solve (see
+    :func:`rerun_own_tests`); a unit whose re-solve differed gets
+    ``own_test = {"unavailable": "re-solve did not reproduce ..."}``."""
+    by_key = {o["key"]: o for o in own}
+    out = []
+    for r in records:
+        o = by_key.get(r["key"])
+        r = dict(r)
+        if o is not None and "own_test" in o:
+            if o.get("reproduced"):
+                r["own_test"] = o["own_test"]
+            else:
+                r["own_test"] = {"unavailable": f"re-solve did not reproduce: {o['mismatch']}"}
+        out.append(r)
+    return out
 
 
 def _input_files(units: list[Unit], data_root: Path) -> dict[str, dict[str, Any]]:

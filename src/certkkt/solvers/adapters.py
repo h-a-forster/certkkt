@@ -9,7 +9,7 @@ import scipy.sparse as sp
 
 from certkkt.instance import Instance
 from certkkt.problem import boxed_duals_to_conic, upper_triangle
-from certkkt.solvers.base import Adapter, SolverResult, as_array
+from certkkt.solvers.base import Adapter, NativeRun, SolverResult, as_array
 
 
 def _cone_rows(inst: Instance) -> dict[str, list[int]]:
@@ -67,10 +67,35 @@ class ClarabelAdapter(Adapter):
             if not hasattr(st, k):
                 raise ValueError(f"unknown Clarabel setting {k!r}")
             setattr(st, k, v)
-        solver = clarabel.DefaultSolver(
-            upper_triangle(fd.P), fd.q, sp.csc_matrix(fd.A), fd.b, cones, st
-        )
+        P, A = upper_triangle(fd.P), sp.csc_matrix(fd.A)
+        solver = clarabel.DefaultSolver(P, fd.q, A, fd.b, cones, st)
         sol = solver.solve()
+        native = NativeRun(
+            form="conic",
+            data={
+                "P": P,
+                "P_triangle": "upper",
+                "q": fd.q,
+                "A": A,
+                "b": fd.b,
+                "cones": [(c.kind, c.dim) for c in inst.problem.cones],
+            },
+            output={k: as_array(getattr(sol, k)) for k in ("x", "z", "s")},
+            settings={
+                k: getattr(st, k)
+                for k in (
+                    "tol_gap_abs",
+                    "tol_gap_rel",
+                    "tol_feas",
+                    "reduced_tol_gap_abs",
+                    "reduced_tol_gap_rel",
+                    "reduced_tol_feas",
+                    "presolve_enable",
+                )
+            }
+            | {"infinity": float(clarabel.get_infinity())},
+            info={"r_prim": float(sol.r_prim), "r_dual": float(sol.r_dual)},
+        )
         raw = str(sol.status)
         status = {
             "Solved": "optimal",
@@ -93,6 +118,7 @@ class ClarabelAdapter(Adapter):
             objective=float(sol.obj_val) + fd.r,
             iterations=int(sol.iterations),
             solve_time=float(sol.solve_time),
+            native=native,
         )
 
 
@@ -125,6 +151,24 @@ class SCSAdapter(Adapter):
         cone = {"z": len(rows["zero"]), "l": len(rows["nonneg"]), "q": _soc_dims(inst)}
         solver = scs.SCS(data, cone, **{"verbose": False, **settings})
         sol = solver.solve()
+        cones = [("zero", cone["z"]), ("nonneg", cone["l"])] + [("soc", d) for d in cone["q"]]
+        native = NativeRun(
+            form="conic",
+            data={
+                "P": data["P"],
+                "P_triangle": "upper",
+                "q": fd.q,
+                "A": A,
+                "b": data["b"],
+                "cones": [c for c in cones if c[1]],
+            },
+            output={k: as_array(sol[k]) for k in ("x", "y", "s")},
+            # SCS's Python API cannot read settings back: these are the C defaults
+            # (glbopts.h) unless set explicitly.
+            settings={"eps_abs": 1e-4, "eps_rel": 1e-4}
+            | {k: settings[k] for k in ("eps_abs", "eps_rel") if k in settings},
+            info={k: float(sol["info"][k]) for k in ("res_pri", "res_dual", "gap")},
+        )
         info = sol["info"]
         raw = str(info["status"])
         status = {
@@ -152,6 +196,7 @@ class SCSAdapter(Adapter):
             objective=float(info["pobj"]) + fd.r,
             iterations=int(info["iter"]),
             solve_time=float(info["solve_time"]) / 1000.0,
+            native=native,
         )
 
 
@@ -203,6 +248,33 @@ class OSQPAdapter(Adapter):
         solver = osqp.OSQP()
         solver.setup(P=_csc32(P), q=q, A=_csc32(A), l=low, u=up, **{"verbose": False, **settings})
         res = solver.solve(raise_error=False)
+        st = solver._solver.get_settings()
+        native = NativeRun(
+            form="box",
+            data={
+                "P": P,
+                "P_triangle": "upper",
+                "q": q,
+                "A": A,
+                # OSQP clips the bounds to +-OSQP_INFTY on setup
+                "l": np.maximum(low, -float(solver.constant("OSQP_INFTY"))),
+                "u": np.minimum(up, float(solver.constant("OSQP_INFTY"))),
+                "infinity": float(solver.constant("OSQP_INFTY")),
+            },
+            output={"x": as_array(res.x), "y": as_array(res.y)},
+            settings={
+                k: getattr(st, k)
+                for k in (
+                    "eps_abs",
+                    "eps_rel",
+                    "scaling",
+                    "scaled_termination",
+                    "check_dualgap",
+                    "polishing",
+                )
+            },
+            info={k: float(getattr(res.info, k)) for k in ("prim_res", "dual_res", "duality_gap")},
+        )
         raw = str(res.info.status)
         status = {
             "solved": "optimal",
@@ -236,6 +308,7 @@ class OSQPAdapter(Adapter):
             objective=None if obj is None or not np.isfinite(obj) else float(obj) + fd.r,
             iterations=int(res.info.iter),
             solve_time=float(res.info.solve_time),
+            native=native,
         )
 
 
@@ -391,6 +464,40 @@ class HiGHSAdapter(Adapter):
         }.get(raw, "error")
         sol = h.getSolution()
         info = h.getInfo()
+        native = NativeRun(
+            form="highs",
+            data={
+                "P": sp.csc_matrix(sp.tril(P)) if P.nnz else sp.csc_matrix((lp.num_col_,) * 2),
+                "P_triangle": "lower",
+                "q": cost,
+                "A": A,
+                "col_lower": np.asarray(lp.col_lower_, dtype=np.float64),
+                "col_upper": np.asarray(lp.col_upper_, dtype=np.float64),
+                "row_lower": np.asarray(lp.row_lower_, dtype=np.float64),
+                "row_upper": np.asarray(lp.row_upper_, dtype=np.float64),
+            },
+            output={
+                k: np.asarray(getattr(sol, k), dtype=np.float64)
+                for k in ("col_value", "row_value", "col_dual", "row_dual")
+            }
+            if sol.value_valid and sol.dual_valid
+            else {},
+            settings={
+                k: h.getOptionValue(k)[1]
+                for k in (
+                    "primal_feasibility_tolerance",
+                    "dual_feasibility_tolerance",
+                    "kkt_tolerance",
+                    "solver",
+                )
+            },
+            info={
+                "max_primal_infeasibility": float(info.max_primal_infeasibility),
+                "max_dual_infeasibility": float(info.max_dual_infeasibility),
+                "num_primal_infeasibilities": int(info.num_primal_infeasibilities),
+                "num_dual_infeasibilities": int(info.num_dual_infeasibilities),
+            },
+        )
         x = as_array(list(sol.col_value)) if sol.value_valid else None
         z = None
         if sol.dual_valid:
@@ -414,6 +521,7 @@ class HiGHSAdapter(Adapter):
             objective=float(info.objective_function_value) if x is not None else None,
             iterations=iters,
             solve_time=float(h.getRunTime()),
+            native=native,
         )
 
 

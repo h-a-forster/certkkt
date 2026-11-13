@@ -232,15 +232,17 @@ A separate one-day check (2026-11-13), not part of the quick profile's tables.
   (Windows 11, about 14 GB RAM shared with other jobs), data read straight into doubles
   (`cbf.read_cbf_float`, identical to the exact reader's doubles). A run was kept under
   3 hours, so only the 8 instances up to 15M nonzeros ran, at 1e-6 only for the larger
-  four. Records: [docs/results/mittelmann-clarabel.jsonl](docs/results/mittelmann-clarabel.jsonl);
+  four. The four smallest were re-run with the committed script on the same day; status,
+  iterations, objective and own-rule values were identical, times differ with machine
+  load. Records: [docs/results/mittelmann-clarabel.jsonl](docs/results/mittelmann-clarabel.jsonl);
   script: [scripts/mittelmann_clarabel.py](scripts/mittelmann_clarabel.py).
 
 | instance | nonzeros | 1e-6 | 1e-4 | default (1e-8) |
 |---|---|---|---|---|
-| chainsing-50000-1 | 1.6M | Solved, 11 s | Solved, 8 s | Solved, 12 s |
-| chainsing-50000-2 | 1.3M | Solved, 31 s | Solved, 27 s | AlmostSolved, 34 s |
-| chainsing-50000-3 | 0.9M | Solved, 16 s | Solved, 15 s | AlmostSolved, 30 s |
-| db-plate-yield-line | 1.6M | Solved, 25 s | Solved, 20 s | Solved, 84 s |
+| chainsing-50000-1 | 1.6M | Solved, 9 s | Solved, 8 s | Solved, 6 s |
+| chainsing-50000-2 | 1.3M | Solved, 17 s | Solved, 20 s | AlmostSolved, 20 s |
+| chainsing-50000-3 | 0.9M | Solved, 13 s | Solved, 12 s | AlmostSolved, 16 s |
+| db-plate-yield-line | 1.6M | Solved, 21 s | Solved, 7 s | Solved, 38 s |
 | db-joint-soerensen | 6.0M | NumericalError, 562 s (19 iterations) | - | - |
 | 2013_firL1Linfeps | 9.9M | time limit, 3738 s (66 iterations) | - | - |
 | 2013_firL2L1alph | 10.0M | Solved, 772 s (9 iterations) | - | - |

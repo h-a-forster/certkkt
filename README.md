@@ -108,7 +108,8 @@ returns) is in [REPORT.md](REPORT.md); how it is run is in
 ```sh
 certkkt fetch mm cblib french
 certkkt study run --profile quick --workers 4      # resumable
-certkkt study report --profile quick
+certkkt study own-tests --units runs/quick/units.jsonl   # each solver's own stopping rule
+certkkt study report --profile quick --own-tests runs/quick-own/own-tests.jsonl
 ```
 
 ## Related work

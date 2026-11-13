@@ -36,6 +36,7 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 | `src/certkkt/problem.py` | conic and boxed forms, dual maps, `make_problem` |
 | `src/certkkt/qps.py`, `cbf.py`, `cvxpy_io.py`, `instance.py` | readers and instances |
 | `src/certkkt/certify.py` | exact certificate and levels |
+| `src/certkkt/own_tests.py` | each solver's own stopping rule, re-implemented from its source, evaluated exactly (DESIGN 3.5) |
 | `src/certkkt/repair.py` | repair methods (DESIGN 4) |
 | `src/certkkt/solvers/` | adapters and the adapter contract |
 | `src/certkkt/testing.py`, `src/pytest_certkkt.py` | assertion helpers; `certkkt` fixture (top-level so pytest loads it without importing certkkt) |
@@ -60,8 +61,16 @@ CERTKKT_RATIONAL=fraction uv run pytest tests/test_certify.py   # pure-Python ba
 uv run certkkt fetch mm cblib french
 uv run certkkt study run --profile quick --suite mm --workers 4          # ~5 min
 uv run certkkt study run --profile quick --suite portfolio --suite cblib --workers 4  # ~3 min
-uv run certkkt study report --profile quick --out docs/results/quick.md --json docs/results/quick.json
+uv run certkkt study own-tests --units docs/results/quick-units.jsonl --out-dir runs/quick-own  # ~3 min
+uv run certkkt study report --profile quick --units docs/results/quick-units.jsonl \
+    --own-tests docs/results/quick-own-tests.jsonl --out docs/results/quick.md --json docs/results/quick.json
 ```
+
+`study own-tests` re-solves recorded units to evaluate each solver's own stopping rule
+(DESIGN 3.5); it keeps a verdict only where the re-solve reproduces the record bit for bit,
+which needs single-threaded BLAS (it sets `OMP_NUM_THREADS=1`; DESIGN 8). New study runs
+record `own_test` per unit directly. `scripts/mittelmann_clarabel.py` runs Clarabel on the
+Mittelmann SOCP instances through the float-only CBF reader (REPORT section 5).
 
 Do not launch the full profile as designed (see Status). `bash scripts/run_study.sh` is
 its launcher (fetch, three-attempt retry loop, log in `runs/longrun.log`, report in
@@ -70,9 +79,11 @@ and `LOG` restrict or redirect it, which is the supported use until the redesign
 
 ## Status
 
-Status (2026-11-06): v0.1.0. Library, CLI, plugin and adapters done and tested (146
-tests, all passing locally; the CI workflow has not run on GitHub yet); quick study run,
-reported in REPORT.md and reproduced by a rerun (`docs/results/quick-rerun.md`). The full
+Status (2026-11-13): v0.1.0 plus own stopping rules. Library, CLI, plugin and adapters
+done and tested; quick study run, reported in REPORT.md and reproduced by a rerun
+(`docs/results/quick-rerun.md`); each solver's own stopping rule evaluated exactly on all
+216 Clarabel, HiGHS, OSQP and SCS quick units (`docs/results/quick-own-tests.jsonl`; no
+unit claiming optimal fails its own rule). The full
 study was started and stopped by owner decision at 348/3093 units (all Maros-Meszaros; 28
 hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, its own
 projection then about 50 more hours (`runs/full/progress.log`); it is not reported.

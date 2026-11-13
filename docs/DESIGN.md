@@ -84,6 +84,9 @@ only the convention, never the values:
 | OSQP 1.1.3 | boxed form for MPS/QPS, else conic rows as `l <= A x <= u` | boxed map (2.2) |
 | HiGHS 1.15.1 | boxed form for MPS/QPS, else conic rows | `y = -row_dual`, `-col_dual`, then 2.2 |
 
+Every adapter also keeps what the solver saw and returned (`NativeRun`: data as passed,
+raw output vectors, termination settings read back where the API allows) for section 3.5.
+
 `tests/test_solvers.py` checks every adapter's convention by exact certification on a
 boxed QP, the same QP in conic form and an SOCP. Tolerance requests (section 5.4) map to
 Clarabel `tol_gap_abs = tol_gap_rel = tol_feas`; SCS and OSQP `eps_abs = eps_rel`; ECOS
@@ -151,6 +154,46 @@ upper bounds), objectives to nearest, and keeps the exact gap as a string when s
 `rank()` orders certificates: `optimal`, then `bounded`, then all others by `max_rel`
 (a one-sided certificate with a huge gap says less than a near-feasible pair).
 
+### 3.5 Each solver's own stopping rule (`own_tests.py`)
+
+The relative measures of 3.2 are one yardstick for every solver, so a miss there is not
+a solver breaking its promise. `own_tests.own_test` evaluates instead the test each
+solver stops on, re-implemented from its source for the versions in `uv.lock`, exactly:
+on the doubles the solver was given (each read as the rational it denotes) and the vectors
+it returned, with the solver's own strict or non-strict inequality. Adapters keep this
+input and output as a `NativeRun` on the result (2.4). The tolerances are those of the
+status claimed: full for `optimal`, reduced for `inaccurate` where the solver defines them.
+
+| solver | source (version) | conditions, all on unscaled quantities |
+|---|---|---|
+| OSQP | `src/auxil.c` `check_termination`, `compute_*_res/_tol`, `compute_obj_val_dual_gap` (C 1.0.0, bundled by osqp-python 1.1.3); defaults `include/public/osqp_api_constants.h` | inf-norms: `A x - z`, `P x + q + A'y`, gap `x'Px + q'x + S(y)`, each `< eps_abs + eps_rel * max(...)` of its terms; `eps = 1e-3`; 10x for "solved inaccurate" |
+| SCS | `src/scs.c` `has_converged`, `populate_residual_struct` (C 3.3.1 at cc244eb, bundled by scs-python 3.3.1); defaults `include/glbopts.h` | inf-norms: `A x + s - b`, `P x + A'y + c`, gap `|x'Px + c'x + b'y|`, each `< eps_abs + eps_rel * max(...)`; `eps = 1e-4` |
+| Clarabel | `src/solver/implementations/default/info.rs` `update`, `is_solved`; `residuals.rs`; `presolver.rs` (Clarabel.rs 0.11.1) | 2-norm residuals over `max(1, ||b||_inf + |x|_2 + |s|_2)` and `max(1, ||q||_inf + |x|_2 + |z|_2)` `< tol_feas`; gap `|p - d| < tol_gap_abs` or `/ max(1, min(|p|, |d|)) < tol_gap_rel`; all `1e-8` (AlmostSolved: `5e-5`, `5e-5`, `1e-4`) |
+| HiGHS | `highs/lp_data/Highs.cpp` `callSolveQp`; `HighsInterface.cpp` `checkOptimality`; `HighsSolution.cpp` `getKktFailures`, `getVariableKktFailures` (1.15.1) | QP path: no bound violated by more than `primal_feasibility_tolerance`, no dual of the wrong sign by more than `dual_feasibility_tolerance` (both `1e-7`); nothing else |
+
+What cannot be evaluated is stated, not guessed:
+
+- OSQP's primal residual uses its internal iterate `z`, which it does not return. The only
+  fact used is `z` in `[l, u]` (the sign of `y` does not pin `z` to a bound: OSQP updates
+  `y` by a sum, so `y_i` can be a rounding residue where `z_i` is interior). With
+  `z0 = proj(A x)`, every `z` has `r(z) >= r(z0)` and `||z|| <= ||A x|| + r(z)`, so the
+  condition fails exactly when `r(z0) (1 - eps_rel) >= eps_abs + eps_rel ||A x||` and is
+  reported as passing when it passes at `z0`; in between it is undetermined. OSQP's
+  rounding of scaled `|y_i| <= 1e-15` to zero inside `S(y)` is not modelled, nor are
+  `scaled_termination` and polishing (the evaluation refuses those runs).
+- Clarabel's fourth condition, `kappa/tau <= 1`, is internal to the homogeneous embedding.
+  Its 2-norms are bracketed by rational square-root bounds (`SQRT_BITS`); a criterion whose
+  bracket straddles the threshold is undetermined.
+- HiGHS's gate does not test stationarity or complementarity, so a HiGHS "Optimal" says
+  nothing about them. Row activities are evaluated as `A x` exactly; the activities HiGHS
+  returned are checked too and kept as a diagnostic. Its LP paths (simplex, IPM, PDLP)
+  are not modelled.
+- ECOS has no evaluator.
+
+`tests/test_own_tests.py` uses the solvers as oracle: on converged runs the exact values
+match each solver's own float report of the same residuals, and runs stopped early by an
+iteration cap fail the rule.
+
 ## 4. Repairs (`repair.py`)
 
 A repair proposes a rational candidate; `certify` decides. Nothing a repair computes is
@@ -196,7 +239,7 @@ deadline is checked between steps, so overshoot of a few seconds is possible).
 |---|---|---|---|
 | `mm` | Maros-Meszaros convex QP set, 138 problems in QPDATA1-3.ZIP | https://www.doc.ic.ac.uk/~im/ | SHA-256 recorded |
 | `cblib` | the 18 continuous SOCPs of the DIMACS set in CBLIB: nb, nb_L1, nb_L2, nb_L2_bessel, nql30/60/180, qssp30/60/180, sched_{50_50,100_50,100_100,200_100}_{orig,scaled} | https://cblib.zib.de/download/all/ | SHA-256 recorded |
-| `mittelmann` | the 18 instances of Mittelmann's "Large Second Order Cone Benchmark" (https://plato.asu.edu/ftp/socp.html); 7 are on CBLIB's public download list (beam7, beam30, chainsing-50000-1/2/3, db-joint-soerensen, db-plate-yield-line); fir*, dsNRL and wbNRL are not | CBLIB | SHA-256 recorded for 5; beam7/beam30 recorded on first download |
+| `mittelmann` | the 18 instances of Mittelmann's "Large Second Order Cone Benchmark" (https://plato.asu.edu/ftp/socp.html), all on CBLIB's download list; CBLIB names the fir*, dsNRL and wbNRL instances `2013_<name>` | CBLIB | SHA-256 pinned for 5; beam7, beam30 and the 11 `2013_` files (74-914 MB each) recorded on first download |
 | `portfolio` | 54 min-variance SOCPs (section 5.3) | Ken French data library, 10/30/49 industry portfolios | checksum recorded on first download (the files are updated monthly) |
 
 Downloads go to `data/raw/` (gitignored); nothing is redistributed. A file whose
@@ -237,7 +280,9 @@ Limits per unit (quick / full / mittelmann): solver 60 s / 600 s / 3600 s; repai
 tolerance-sweep units of `mm` and `cblib` are certified as is without repairs (E3 needs
 only the as-is residuals; repairs would multiply the run time by four). Exact work is
 skipped above 2M (8M for mittelmann) nonzeros, and Mittelmann files above 30 MB
-compressed (beam7, beam30) are not parsed (64M nonzeros do not fit in memory as Python rationals).
+compressed (beam7, beam30 and the 11 `2013_` files) are not parsed (64M nonzeros do not
+fit in memory as Python rationals). `cbf.read_cbf_float` reads any of them straight into
+doubles, for solver status only (`scripts/mittelmann_clarabel.py`).
 
 ### 5.5 Execution
 
@@ -266,6 +311,12 @@ and errors count as not certified):
   `max_rel <= 1e-8`, with the largest log10 ratio of the two `max_rel` values.
 - **E5 Mittelmann**: per instance, the solver's status, time, as-is `max_rel` and best
   level; the count of default-setting Clarabel solves with status `optimal`.
+- **E7 own stopping rule**: among units claiming optimal, the share whose output fails
+  the solver's own stopping rule exactly (3.5), with the binding condition and the
+  largest value/threshold ratio. A study run records it per unit (`own_test`); for an
+  existing run, `certkkt study own-tests` re-solves each unit with its recorded settings,
+  keeps the evaluation only where status, iterations and objective reproduce bit for bit,
+  and `study report --own-tests` merges it.
 - **E6 paired solver comparison**: on the instances every solver of a suite ran, per
   solver pair, the problems with an exact optimum from only one of the two, an exact
   McNemar test and Holm adjustment over the pairs; plus the union and intersection.
@@ -310,6 +361,10 @@ sets.
 
 ## 8. Decisions and known limitations
 
+- Reproducing a solve needs the same BLAS thread count: SCS's bundled OpenBLAS reads
+  `OMP_NUM_THREADS` when it loads, and with more threads its sums change order and SCS
+  takes other steps (sched_50_50_orig: objective 26617.68 with one thread, 26613.57
+  without the variable). Workers and `study own-tests` set it to 1.
 - Exact decimals: the certified problem is the published one. A solver sees the doubles
   nearest to it, so a solution can be exactly feasible for the doubles and not for the
   decimals; the difference is below 1e-16 relative per coefficient and shows up only at

@@ -75,8 +75,8 @@ CBLIB_DIMACS = {
 }
 
 #: The 18 instances of Mittelmann's "Large Second Order Cone Benchmark"
-#: (https://plato.asu.edu/ftp/socp.html). Only the ones with a checksum or a None entry
-#: are on CBLIB's public download list; the fir*, dsNRL and wbNRL instances are not.
+#: (https://plato.asu.edu/ftp/socp.html). All 18 are on CBLIB's download list; CBLIB names
+#: the fir*, dsNRL and wbNRL instances with a "2013_" prefix (CBLIB_MITTELMANN).
 MITTELMANN_SOCP = (
     "beam7",
     "beam30",
@@ -105,6 +105,10 @@ CBLIB_MITTELMANN: dict[str, str | None] = {
     "chainsing-50000-3": "706edee4c87a57bac2f51f2c9905a0f6b474f6b369d7a1928461cf845235b7ac",
     "db-joint-soerensen": "e226d2a743425e4a54d4846765c9c107277b84dda1e3008be667dc525a8e2446",
     "db-plate-yield-line": "12ed886514a1b38e0e6f49030330ee657a30f774eaa5658098e32f21ced44d27",
+    # 74 MB to 914 MB compressed (4.2 GB together), recorded on first download
+    **{
+        f"2013_{n}": None for n in MITTELMANN_SOCP if n.startswith("fir") or n in ("dsNRL", "wbNRL")
+    },
 }
 
 #: Ken French industry portfolios (monthly, value weighted); updated monthly upstream.

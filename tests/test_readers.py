@@ -3,7 +3,7 @@ import gzip
 import pytest
 
 from certkkt import Q, certify, load_instance
-from certkkt.cbf import parse_cbf
+from certkkt.cbf import parse_cbf, read_cbf_float
 from certkkt.problem import boxed_duals_to_conic, conic_duals_to_boxed
 from certkkt.qps import FormatError, parse_qps
 
@@ -174,6 +174,24 @@ def test_cbf_rotated_cone_becomes_exact_soc():
 def test_cbf_unsupported_features_fail_loudly(bad):
     with pytest.raises(FormatError):
         parse_cbf(CBF + bad)
+
+
+def test_cbf_float_reader_matches_the_exact_reader(tmp_path):
+    text = (
+        CBF.replace("MIN", "MAX")
+        .replace("CON\n5 2\nL= 1\nQR 4", "CON\n6 3\nL= 1\nQR 4\nL- 1")
+        .replace("ACOORD\n6\n", "ACOORD\n8\n5 0 0.1\n5 3 0.2\n")
+        .replace("BCOORD\n1\n0 -1", "BCOORD\n2\n0 -1\n5 0.3")
+    )
+    f = tmp_path / "t.cbf.gz"
+    f.write_bytes(gzip.compress(text.encode()))
+    exact = parse_cbf(text)
+    fd, cones = read_cbf_float(f)
+    want = exact.float_data()
+    assert [(c.kind, c.dim) for c in cones] == [(c.kind, c.dim) for c in exact.cones]
+    assert (fd.A != want.A).nnz == 0 and fd.A.shape == want.A.shape
+    assert fd.b.tolist() == want.b.tolist() and fd.q.tolist() == want.q.tolist()
+    assert fd.r == want.r
 
 
 def test_load_instance_reads_gzip(tmp_path):

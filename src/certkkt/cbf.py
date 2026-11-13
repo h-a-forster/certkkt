@@ -14,11 +14,15 @@ the identity, a sign flip (``L-``) or the rational map that turns a rotated cone
 from __future__ import annotations
 
 import gzip
+import itertools
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from certkkt.problem import Cone, ConicProblem, merge_cones
+import numpy as np
+import scipy.sparse as sp
+
+from certkkt.problem import Cone, ConicProblem, FloatData, merge_cones
 from certkkt.qps import FormatError
 from certkkt.rational import ONE, ZERO, Q, as_double, to_q
 from certkkt.sparse import QMatrix
@@ -226,4 +230,157 @@ def _comb(a: dict[int, Any], ca: Any, b: dict[int, Any], cb: Any) -> dict[int, A
     return out
 
 
-__all__ = ["parse_cbf", "read_cbf"]
+# -- float-only path ----------------------------------------------------------------------
+
+_CHUNK_LINES = 1 << 20
+
+
+def _coord_block(lines: Iterator[str], k: int, width: int, what: str) -> np.ndarray:
+    """``k`` lines of ``width`` numbers each, parsed in chunks by numpy."""
+    out = np.empty((k, width), dtype=np.float64)
+    done = 0
+    while done < k:
+        take = min(_CHUNK_LINES, k - done)
+        chunk = list(itertools.islice(lines, take))
+        if len(chunk) != take:
+            raise FormatError(f"unexpected end of file in {what}")
+        vals = np.array(" ".join(chunk).split(), dtype=np.float64)
+        if vals.size != take * width:
+            raise FormatError(f"{what}: expected {width} numbers per line")
+        out[done : done + take] = vals.reshape(take, width)
+        done += take
+    return out
+
+
+def read_cbf_float(path: str | Path) -> tuple[FloatData, list[Cone]]:
+    """Read a CBF file straight into doubles: the data and cones of :func:`read_cbf`'s
+    problem as ``problem.float_data()`` would give them, without building exact rationals.
+
+    For instances too large for exact parsing (tens of millions of nonzeros), so that
+    their solver status can still be measured; nothing read this way is certified.
+    Duplicate coordinates are summed in floating point.
+    """
+    p = Path(path)
+    with p.open("rb") as fh:
+        gz = fh.read(2) == b"\x1f\x8b"
+    opener = gzip.open if gz else open
+    with opener(p, "rt", encoding="latin-1") as fh:
+        lines = (s for raw in fh if (s := raw.strip()) and not s.startswith("#"))
+        return _parse_cbf_float(lines)
+
+
+def _parse_cbf_float(lines: Iterator[str]) -> tuple[FloatData, list[Cone]]:
+    sense, n, m = 1, 0, 0
+    var_cones: list[tuple[str, int]] | None = None
+    con_cones: list[tuple[str, int]] = []
+    obj = np.zeros(0)
+    obj_b = 0.0
+    acoo = np.zeros((0, 3))
+    bcoo = np.zeros((0, 2))
+
+    def nxt(what: str) -> str:
+        try:
+            return next(lines)
+        except StopIteration:
+            raise FormatError(f"unexpected end of file in {what}") from None
+
+    def cone_list(what: str) -> tuple[int, list[tuple[str, int]]]:
+        total, k = (int(t) for t in nxt(what).split())
+        cones = []
+        for _ in range(k):
+            name, dim = nxt(what).split()
+            kind = _CONE_MAP.get(name)
+            if kind is None:
+                raise FormatError(f"unsupported cone {name!r}")
+            cones.append((kind, int(dim)))
+        if sum(d for _, d in cones) != total:
+            raise FormatError(f"{what}: cone dimensions do not add up to {total}")
+        return total, cones
+
+    for line in lines:
+        key = line.split()[0].upper()
+        if key == "VER":
+            if int(nxt("VER").split()[0]) not in (1, 2, 3):
+                raise FormatError("unsupported CBF version")
+        elif key == "OBJSENSE":
+            sense = 1 if nxt("OBJSENSE").split()[0].upper() == "MIN" else -1
+        elif key == "VAR":
+            n, var_cones = cone_list("VAR")
+            obj = np.zeros(n)
+        elif key == "CON":
+            m, con_cones = cone_list("CON")
+        elif key == "INT":
+            if int(nxt("INT").split()[0]) > 0:
+                raise FormatError("integer variables are not supported (continuous only)")
+        elif key == "OBJACOORD":
+            e = _coord_block(lines, int(nxt(key).split()[0]), 2, key)
+            np.add.at(obj, e[:, 0].astype(np.int64), e[:, 1])
+        elif key == "OBJBCOORD":
+            obj_b = float(nxt(key).split()[0])
+        elif key == "ACOORD":
+            acoo = _coord_block(lines, int(nxt(key).split()[0]), 3, key)
+        elif key == "BCOORD":
+            bcoo = _coord_block(lines, int(nxt(key).split()[0]), 2, key)
+        elif key in ("PSDVAR", "PSDCON", "FCOORD", "OBJFCOORD", "HCOORD", "DCOORD"):
+            if int(nxt(key).split()[0]) > 0:
+                raise FormatError(f"{key}: semidefinite data is not supported")
+        else:
+            raise FormatError(f"unknown or unsupported keyword {key!r}")
+    if var_cones is None:
+        raise FormatError("missing VAR section")
+    ai, aj = acoo[:, 0].astype(np.int64), acoo[:, 1].astype(np.int64)
+    if acoo.size and (ai.min() < 0 or ai.max() >= m or aj.min() < 0 or aj.max() >= n):
+        raise FormatError("ACOORD index out of range")
+    a_con = sp.csr_array((acoo[:, 2], (ai, aj)), shape=(m, n))
+    b_con = np.zeros(m)
+    np.add.at(b_con, bcoo[:, 0].astype(np.int64), bcoo[:, 1])
+    a_var = sp.identity(n, format="csr")
+
+    # Each block holds M with s = T (M x + c); its canonical rows are -T M and rhs T c.
+    t_rows: list[int] = []
+    t_cols: list[int] = []
+    t_vals: list[float] = []
+    cones: list[Cone] = []
+    out_row = 0
+
+    def emit(kind: str, start: int, dim: int, offset: int) -> None:
+        nonlocal out_row
+        if kind == "free":
+            return
+        idx = list(range(offset + start, offset + start + dim))
+        if kind == "rsoc":  # (x0 + x1/2, x0 - x1/2, w): exact in binary
+            entries = [(0, idx[0], 1.0), (0, idx[1], 0.5), (1, idx[0], 1.0), (1, idx[1], -0.5)]
+            entries += [(r, idx[r], 1.0) for r in range(2, dim)]
+            kind = "soc"
+        else:
+            sign = -1.0 if kind == "nonpos" else 1.0
+            entries = [(r, idx[r], sign) for r in range(dim)]
+        if kind == "soc" and dim == 1:
+            kind = "nonneg"
+        for r, c, v in entries:
+            t_rows.append(out_row + r)
+            t_cols.append(c)
+            t_vals.append(v)
+        cones.append(Cone("nonneg" if kind == "nonpos" else kind, dim))
+        out_row += dim
+
+    start = 0
+    for kind, dim in con_cones:
+        emit(kind, start, dim, 0)
+        start += dim
+    start = 0
+    for kind, dim in var_cones:
+        emit(kind, start, dim, m)
+        start += dim
+    T = sp.csr_array((t_vals, (t_rows, t_cols)), shape=(out_row, m + n))
+    stacked = sp.vstack([a_con, a_var], format="csr")
+    A = sp.csr_array(-(T @ stacked))
+    A.sum_duplicates()
+    A.eliminate_zeros()
+    b = T @ np.concatenate([b_con, np.zeros(n)])
+    q, r = (obj, obj_b) if sense == 1 else (-obj, -obj_b)
+    fd = FloatData(P=sp.csr_array((n, n)), q=q, A=A, b=b, r=float(r))
+    return fd, merge_cones(cones)
+
+
+__all__ = ["parse_cbf", "read_cbf", "read_cbf_float"]

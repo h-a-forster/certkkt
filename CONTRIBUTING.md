@@ -22,7 +22,7 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-CI runs the full suite on Ubuntu (Python 3.12) for pull requests and on demand.
+CI runs the full suite on Ubuntu (Python 3.12) on pushes to main, on pull requests and on demand.
 
 ## Rules
 

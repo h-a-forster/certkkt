@@ -1,8 +1,7 @@
 # certkkt 0.1.0
 
-First release (2026-10-30; alpha, the API may change). Not tagged yet: the repository is
-private and a tag or public release waits for the owner's go-ahead. With access to the
-repository:
+First release (2026-10-30; alpha, the API may change), tagged `v0.1.0` and published as a
+GitHub release on 2026-11-08. Install:
 
 ```sh
 uv add "certkkt[all] @ git+https://github.com/h-a-forster/certkkt"

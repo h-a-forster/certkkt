@@ -3,9 +3,11 @@
 Date: 2026-10-30. Profile: `quick` (DESIGN section 5.4). The full profile was started
 and stopped by owner decision at 348 of 3093 units; nothing here comes from it (see
 AGENTS.md). Every number below comes from
-[docs/results/quick-units.jsonl](docs/results/quick-units.jsonl) (one record per unit) via
-`certkkt study report`; the generated tables are in
-[docs/results/quick.md](docs/results/quick.md).
+[docs/results/quick-units.jsonl](docs/results/quick-units.jsonl) (one record per unit).
+`certkkt study report` generates the tables and the certification, pairing,
+float64-versus-exact and certificate-level counts into
+[docs/results/quick.md](docs/results/quick.md); the remaining figures (binding measures,
+gap ranges, repair diagnostics) are direct counts over the same records.
 
 ## 1. What ran
 
@@ -34,9 +36,10 @@ at 1e-4, 1e-6 and 1e-8 (largest absolute difference 2e-11), so the as-is columns
 and the failure counts in finding 1, need no exact arithmetic. What does need it: none of
 the 243 float outputs is exactly feasible on both sides as returned (216 `residuals`, 27
 `primal_feasible`), and only the exact repairs turn them into certificates. They found an
-exact rational optimum for 93 Maros-Meszaros units (29 of 40 problems, every one of them
-from HiGHS output) and an exactly feasible primal-dual pair bracketing the optimum
-(`bounded`) for all 72 portfolio units and 16 more Maros-Meszaros units.
+exact rational optimum for 93 Maros-Meszaros units (HiGHS 29, Clarabel 23, SCS 22, OSQP
+19), covering 29 of 40 problems, all of which HiGHS output reaches (finding 2), and an
+exactly feasible primal-dual pair bracketing the optimum (`bounded`) for all 72 portfolio
+units and 16 more Maros-Meszaros units.
 
 Exact certification of default solver output, Maros-Meszaros subset (n = 40 problems per
 solver; nominal 95% Wilson intervals, see section 6):

@@ -80,7 +80,16 @@ def test_report_compares_exactly_and_counts_comparable_units():
     assert not asis_ok({**rec, "as_is": {"max_rel": 0.0, "psd": "not_psd"}}, "1e-6")
     full = {**over, "float": {"rel_primal": 0.0, "rel_dual": 1e-9, "rel_gap": 0.0}}
     no_float = {**over, "key": "b", "instance": "j"}
-    assert "disagree at eps = 1e-8 on 1 of 1 units" in markdown([full, no_float])
+    text = markdown([full, no_float])
+    assert "disagree at eps = 1e-8 on 1 of 1 units" in text
+    assert (
+        "largest absolute difference: 9e-09" in text and "0 of 1e-4, 0 of 1e-6, 1 of 1e-8" in text
+    )
+    leveled = [
+        {**full, "as_is": {**full["as_is"], "level": "residuals"}, "best": {"level": "optimal"}}
+    ]
+    assert "as returned (as-is), over units with a solution: residuals 1." in markdown(leveled)
+    assert "after repair, s: optimal 1." in markdown(leveled)
 
 
 @pytest.fixture

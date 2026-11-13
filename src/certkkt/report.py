@@ -76,6 +76,13 @@ def _status(rec: dict[str, Any]) -> str:
     return rec.get("result", {}).get("status") or rec.get("outcome", "?")
 
 
+def _levels(levels: Any) -> str:
+    counts: dict[str, int] = defaultdict(int)
+    for lv in levels:
+        counts[lv or "none"] += 1
+    return ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
+
+
 def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Machine-readable summary: counts and Wilson intervals per suite/solver/tolerance."""
     out: dict[str, Any] = {}
@@ -165,10 +172,27 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
                 abs(math.log10(max(float_max_rel(r), 1e-300) / max(asis_rel(r), 1e-300)))
                 for r in comparable
             )
-            near = sum(5e-9 <= asis_rel(r) <= 2e-8 for r in comparable)
+            diff = max(abs(float_max_rel(r) - asis_rel(r)) for r in comparable)
+            near = ", ".join(
+                f"{sum(float(e) / 2 <= asis_rel(r) <= 2 * float(e) for r in comparable)} of {e}"
+                for e in EPS
+            )
             lines.append(
-                f"Largest |log10(float64 / exact)| of max_rel: {ratio:.2f}; {near} units have "
-                "an exact max_rel within a factor of 2 of 1e-8."
+                f"Largest |log10(float64 / exact)| of max_rel: {ratio:.2f}; largest absolute "
+                f"difference: {diff:.2g}. Units with an exact max_rel within a factor of 2 "
+                f"of eps: {near}."
+            )
+        lines.append("")
+        lines.append(
+            "Certificate level as returned (as-is), over units with a solution: "
+            + _levels(r["as_is"].get("level") for r in records if r.get("as_is"))
+            + "."
+        )
+        for (suite,), recs in _group(records, "suite").items():
+            lines.append(
+                f"Best certificate after repair, {suite}: "
+                + _levels((r.get("best") or {}).get("level") for r in recs)
+                + "."
             )
         lines.append("")
 

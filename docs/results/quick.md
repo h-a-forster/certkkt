@@ -42,7 +42,12 @@ Exact optimum paired by instance (mm, 40 problems): 29 reached from at least one
 Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-4 on 0 of 243 units with both.
 Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-6 on 0 of 243 units with both.
 Float64 and exact evaluation of the as-is residuals disagree at eps = 1e-8 on 0 of 243 units with both.
-Largest |log10(float64 / exact)| of max_rel: 0.15; 18 units have an exact max_rel within a factor of 2 of 1e-8.
+Largest |log10(float64 / exact)| of max_rel: 0.15; largest absolute difference: 2e-11. Units with an exact max_rel within a factor of 2 of eps: 19 of 1e-4, 12 of 1e-6, 18 of 1e-8.
+
+Certificate level as returned (as-is), over units with a solution: residuals 216, primal_feasible 27.
+Best certificate after repair, cblib: residuals 12.
+Best certificate after repair, mm: optimal 93, residuals 38, bounded 16, dual_feasible 12, none 1.
+Best certificate after repair, portfolio: bounded 72.
 
 ## Requested tolerance versus certified accuracy
 

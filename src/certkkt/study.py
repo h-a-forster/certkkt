@@ -56,6 +56,10 @@ class Limits:
     max_file_bytes: int | None = None
     #: run the repairs on tolerance-sweep units too (not only on tol = "default")
     repair_sweep: bool = True
+    #: per-unit wall budget: the repairs get at most what is left of it after loading,
+    #: solving, the own rule and the as-is certification (and at most ``repair_seconds``);
+    #: None = ``repair_seconds`` alone
+    unit_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -69,10 +73,35 @@ class Profile:
     portfolio: tuple[str, ...] | None  # None = whole family
     mittelmann: tuple[str, ...]
     limits: dict[str, Limits] = field(default_factory=dict)
+    #: Maros-Meszaros: exactly these problems (overrides ``mm_max_bytes``)
+    mm: tuple[str, ...] | None = None
 
     def limits_for(self, suite: str) -> Limits:
         return self.limits.get(suite, Limits())
 
+
+#: Maros-Meszaros cap of the medium profile: nnz(A) + nnz(P) as published, P as the full
+#: symmetric matrix (``datasets.mm_nonzeros``, which counts exactly what ``parse_qps``
+#: builds: checked on all 138 problems on 2026-11-21).
+MEDIUM_MAX_NNZ = 50_000
+#: The 116 of 138 problems within MEDIUM_MAX_NNZ, frozen here because counting all 138
+#: files takes minutes; tests/test_study.py re-derives it from the data.
+MEDIUM_MM = (
+    "AUG3D", "AUG3DC", "AUG3DCQP", "AUG3DQP", "CONT-050", "CVXQP1_M", "CVXQP1_S", "CVXQP2_M",
+    "CVXQP2_S", "CVXQP3_M", "CVXQP3_S", "DPKLO1", "DTOC3", "DUAL1", "DUAL2", "DUAL3", "DUAL4",
+    "DUALC1", "DUALC2", "DUALC5", "DUALC8", "GENHS28", "GOULDQP2", "GOULDQP3", "HS118", "HS21",
+    "HS268", "HS35", "HS35MOD", "HS51", "HS52", "HS53", "HS76", "HUES-MOD", "HUESTIS", "KSIP",
+    "LASER", "LISWET1", "LISWET10", "LISWET11", "LISWET12", "LISWET2", "LISWET3", "LISWET4",
+    "LISWET5", "LISWET6", "LISWET7", "LISWET8", "LISWET9", "LOTSCHD", "MOSARQP1", "MOSARQP2",
+    "POWELL20", "PRIMAL1", "PRIMAL2", "PRIMAL3", "PRIMAL4", "PRIMALC1", "PRIMALC2", "PRIMALC5",
+    "PRIMALC8", "QADLITTL", "QAFIRO", "QBANDM", "QBEACONF", "QBORE3D", "QBRANDY", "QCAPRI",
+    "QE226", "QETAMACR", "QFFFFF80", "QFORPLAN", "QGFRDXPN", "QGROW15", "QGROW22", "QGROW7",
+    "QISRAEL", "QPCBLEND", "QPCBOEI1", "QPCBOEI2", "QPCSTAIR", "QPILOTNO", "QPTEST", "QRECIPE",
+    "QSC205", "QSCAGR25", "QSCAGR7", "QSCFXM1", "QSCFXM2", "QSCFXM3", "QSCORPIO", "QSCRS8",
+    "QSCSD1", "QSCSD6", "QSCSD8", "QSCTAP1", "QSCTAP2", "QSCTAP3", "QSEBA", "QSHARE1B",
+    "QSHARE2B", "QSHIP04L", "QSHIP04S", "QSHIP08S", "QSHIP12S", "QSIERRA", "QSTAIR", "QSTANDAT",
+    "S268", "STADAT1", "STADAT2", "STADAT3", "TAME", "VALUES", "YAO", "ZECEVIC2",
+)  # fmt: skip
 
 PROFILES = {
     "quick": Profile(
@@ -90,6 +119,27 @@ PROFILES = {
         ),
         mittelmann=(),
         limits={s: Limits(60.0, 30.0, 300.0) for s in ("mm", "cblib", "portfolio")},
+    ),
+    # Medium (DESIGN 5.4): every Maros-Meszaros problem with nnz(A) + nnz(P) <= 50 000 (116
+    # of 138; the quick profile's 40 have at most 2 582) at solver defaults, nothing else.
+    # Measured 2026-11-21 on a machine loaded by other jobs, all four solvers at a 60 s
+    # limit: as-is certification plus own rule took at most 0.9 s per unit at 1e4
+    # (QSCFXM3) and 5e4 (DTOC3, LISWET5) nonzeros, but 13-54 s at 2.1e5 (CONT-201), where
+    # loading took 14 s and every solver ran into its time limit (Clarabel returned after
+    # 110 s), so a unit there cannot fit 120 s. Below the cap the solver dominates: HiGHS
+    # took 16 s on QSCFXM3 and its whole 60 s on LISWET5. Between 5e4 and 1e5 lie
+    # CVXQP1/2/3_L, where Clarabel's PSD check took 1171 s (DESIGN 8). Projection from the
+    # first 41-unit smoke slice (mean 59 s per unit, timeouts at 120 s): about 7.6
+    # worker-hours for 464 units (about 1.9 h of wall time on 4 workers).
+    "medium": Profile(
+        name="medium",
+        tolerances={"mm": ("default",), "cblib": (), "portfolio": (), "mittelmann": ()},
+        mm_max_bytes=None,
+        cblib=(),
+        portfolio=(),
+        mittelmann=(),
+        limits={"mm": Limits(60.0, 60.0, 120.0, unit_seconds=100.0)},
+        mm=MEDIUM_MM,
     ),
     "full": Profile(
         name="full",
@@ -150,6 +200,8 @@ def instance_names(profile: Profile, suite: str, data_root: Path) -> list[str]:
     from certkkt.portfolio import FAMILY
 
     if suite == "mm":
+        if profile.mm is not None:
+            return sorted(profile.mm)
         out = [
             name
             for name, _, _, size in mm_members(data_root)
@@ -227,8 +279,16 @@ def versions() -> dict[str, str]:
     return out
 
 
-def run_unit(unit: Unit, inst: Any, limits: Limits, timings: dict[str, float]) -> dict[str, Any]:
-    """Solve, certify and repair one unit; returns the JSON record (without timeout info)."""
+def run_unit(
+    unit: Unit,
+    inst: Any,
+    limits: Limits,
+    timings: dict[str, float],
+    checkpoint: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Solve, certify and repair one unit; returns the JSON record (without timeout info).
+    ``checkpoint`` receives a copy of the record before the repairs start (outcome
+    ``certified_as_is``), so a unit killed during its repairs keeps its as-is result."""
     import numpy as np
 
     from certkkt.certify import certify, float_residuals
@@ -270,8 +330,18 @@ def run_unit(unit: Unit, inst: Any, limits: Limits, timings: dict[str, float]) -
     if unit.tol != "default" and not limits.repair_sweep:
         rec["outcome"] = "certified_as_is"
         return rec
+    budget = limits.repair_seconds
+    if limits.unit_seconds is not None:
+        budget = min(budget, limits.unit_seconds - sum(timings.values()))
+        rec["repair_budget"] = round(budget, 3)
+    if budget <= 0:
+        rec["repair_notes"] = {"all": "time budget exhausted before the repairs (unit budget)"}
+        rec["outcome"] = "certified_as_is"
+        return rec
+    if checkpoint is not None:
+        checkpoint({**rec, "outcome": "certified_as_is"})
     t0 = time.perf_counter()
-    out = repair(prob, np.asarray(x), z, time_budget=limits.repair_seconds)
+    out = repair(prob, np.asarray(x), z, time_budget=budget)
     timings["repair"] = time.perf_counter() - t0
     rec["best"] = out.best.to_dict()
     rec["methods"] = {
@@ -294,9 +364,14 @@ def own_test_record(res: Any) -> dict[str, Any]:
         return {"unavailable": str(exc)}
 
 
+#: Thread-count variables the BLAS libraries (numpy's and SCS's bundled OpenBLAS, MKL)
+#: read once, when they load; each worker starts with them set to 1 (see _spawn).
+BLAS_THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+_ENV_LOCK = threading.Lock()
+
+
 def _worker(conn: Connection, data_root: str) -> None:
     """Worker loop: receive (instance, [unit dicts], limits dict), send one record each."""
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
     root = Path(data_root)
     while True:
         msg = conn.recv()
@@ -329,8 +404,15 @@ def _worker(conn: Connection, data_root: str) -> None:
             if inst is None:
                 rec = {"key": unit.key, **ud, "outcome": outcome, "error": load_error}
             else:
+
+                def checkpoint(
+                    partial: dict[str, Any], timings: dict[str, float] = timings
+                ) -> None:
+                    partial["seconds"] = {k: round(v, 3) for k, v in timings.items()}
+                    conn.send({**partial, "partial": True})
+
                 try:
-                    rec = run_unit(unit, inst, limits, timings)
+                    rec = run_unit(unit, inst, limits, timings, checkpoint)
                 except Exception as exc:
                     rec = {
                         "key": unit.key,
@@ -537,10 +619,46 @@ def rerun_own_tests(
     objective match the recorded ones exactly (only then does the evaluation describe the
     recorded output). Appends one record per unit to ``out_dir/own-tests.jsonl`` and
     skips keys already there. Returns the number of new records.
+
+    The re-solves run in a spawned process that starts with the study workers'
+    single-threaded BLAS environment (:func:`_spawn`): this process has usually imported
+    numpy already, too late for its BLAS to read the variables.
     """
-    # The study's workers run with OMP_NUM_THREADS=1, which SCS's bundled OpenBLAS reads
-    # when it loads; with more threads its sums change order and SCS takes other steps.
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    proc, conn = _spawn(data_root, target=_own_tests_child)
+    try:
+        conn.send((str(units_path), str(out_dir)))
+        while True:
+            try:
+                kind, value = conn.recv()
+            except EOFError:
+                raise RuntimeError("own-tests process exited without a result") from None
+            if kind == "log":
+                echo(value)
+            elif kind == "error":
+                raise RuntimeError(f"own-tests process failed: {value}")
+            else:
+                return int(value)
+    finally:
+        proc.join(timeout=10)
+        if proc.is_alive():
+            proc.kill()
+
+
+def _own_tests_child(conn: Connection, data_root: str) -> None:
+    units_path, out_dir = conn.recv()
+    try:
+        n = _rerun_own_tests_here(
+            Path(units_path), Path(out_dir), Path(data_root), lambda s: conn.send(("log", s))
+        )
+    except BaseException:
+        conn.send(("error", traceback.format_exc()[-2000:]))
+    else:
+        conn.send(("done", n))
+
+
+def _rerun_own_tests_here(
+    units_path: Path, out_dir: Path, data_root: Path, echo: Callable[[str], None]
+) -> int:
     from certkkt.own_tests import RULES
     from certkkt.solvers import get_adapter
 
@@ -562,6 +680,7 @@ def rerun_own_tests(
                 "versions": versions(),
                 "solvers": _solver_versions(),
                 "platform": platform.platform(terse=True),
+                "blas_threads": {v: os.environ.get(v) for v in BLAS_THREAD_VARS},
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
             },
             indent=2,
@@ -645,11 +764,25 @@ def _solver_versions() -> dict[str, str]:
     return {name: a.version() for name, a in ADAPTERS.items()}
 
 
-def _spawn(data_root: Path) -> tuple[Any, Connection]:
+def _spawn(data_root: Path, target: Callable[..., None] = _worker) -> tuple[Any, Connection]:
+    """Start a worker with single-threaded BLAS. A spawned process imports certkkt, and
+    with it numpy, before ``target`` runs, so setting the variables inside the worker is
+    too late for numpy's BLAS: they go into the environment the process starts with. The
+    parent's environment is restored afterwards (under a lock: drivers spawn from threads)."""
     ctx = get_context("spawn")
     parent, child = ctx.Pipe()
-    proc = ctx.Process(target=_worker, args=(child, str(data_root)), daemon=True)
-    proc.start()
+    proc = ctx.Process(target=target, args=(child, str(data_root)), daemon=True)
+    with _ENV_LOCK:
+        saved = {k: os.environ.get(k) for k in BLAS_THREAD_VARS}
+        os.environ.update(dict.fromkeys(BLAS_THREAD_VARS, "1"))
+        try:
+            proc.start()
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
     child.close()
     return proc, parent
 
@@ -664,28 +797,37 @@ def _drive(work: queue.Queue, profile: Profile, data_root: Path, sink: _Sink) ->
                 return
             limits = profile.limits_for(suite)
             pending = list(us)
+            # Records a worker sent before its repairs: kept if the unit dies in them.
+            partial: dict[str, dict[str, Any]] = {}
             while pending:
                 conn.send((suite, name, [asdict(u) for u in pending], asdict(limits)))
+                deadline = time.monotonic() + limits.hard_seconds
                 while pending:
-                    if conn.poll(limits.hard_seconds):
+                    if conn.poll(max(0.0, deadline - time.monotonic())):
                         try:
                             rec = conn.recv()
                         except EOFError:
                             rec = None
+                        if rec is not None and rec.pop("partial", False):
+                            partial[rec["key"]] = rec
+                            continue
                         if rec is not None:
                             pending = [u for u in pending if u.key != rec["key"]]
                             sink.record(rec)
+                            deadline = time.monotonic() + limits.hard_seconds
                             continue
                         outcome, msg = "crash", "worker exited"
                     else:
                         outcome, msg = "timeout", f"exceeded {limits.hard_seconds:.0f}s"
                     unit = pending.pop(0)
+                    kept = partial.get(unit.key, {})
                     sink.record(
                         {
+                            **kept,
                             "key": unit.key,
                             **asdict(unit),
                             "outcome": outcome,
-                            "error": msg,
+                            "error": msg + (" during the repairs" if kept else ""),
                             "limits": asdict(limits),
                         }
                     )
@@ -702,7 +844,10 @@ def _drive(work: queue.Queue, profile: Profile, data_root: Path, sink: _Sink) ->
 
 
 __all__ = [
+    "BLAS_THREAD_VARS",
     "Limits",
+    "MEDIUM_MAX_NNZ",
+    "MEDIUM_MM",
     "PROFILES",
     "Profile",
     "SUITES",

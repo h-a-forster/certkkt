@@ -280,7 +280,32 @@ does not change tolerances.
 | profile | mm | cblib | portfolio | mittelmann |
 |---|---|---|---|---|
 | quick | files <= 100 kB (40 problems), default | nql30, qssp30, sched_50_50_orig/scaled, default | 6 instances (K = 10; 2005, 2015, 2025; both L), all four tol | - |
+| medium | nnz(A) + nnz(P) <= 50 000 (116 problems), default | - | - | - |
 | full | all 138, all four tol | all 18, all four tol | all 54, all four tol | 7, default |
+
+The medium profile selects by nonzeros, not file size: nnz(A) + nnz(P) of the problem as
+published, P as the full symmetric matrix, counted from the QPS text by
+`datasets.mm_nonzeros` (equal to what `parse_qps` builds on all 138 problems). Problems
+above the cap are not planned at all. The 116 names are frozen in `study.MEDIUM_MM`
+(counting all 138 files takes minutes); a data-backed test re-derives them. Its limits:
+solver 60 s; hard kill 120 s per unit; repairs get at most 60 s and at most what is left
+of a 100 s unit budget after loading, solving, the own rule and the as-is certification
+(nothing when none is left: outcome `certified_as_is`, note "time budget exhausted"), so
+repair counts are budget-bound. The worker sends each unit's record before its repairs,
+so a unit killed during them keeps its as-is certificate and own-rule verdict (outcome
+`timeout`, error "... during the repairs"). The cap was chosen by measurement
+(2026-11-21, a machine loaded by other jobs): as-is certification plus own rule took at
+most 0.9 s per unit at 1e4 and 5e4 nonzeros (QSCFXM3; DTOC3, LISWET5) but 13-54 s at
+2.1e5 (CONT-201, after a 14 s load and solver time limits up to 110 s), which cannot
+fit 120 s; on CVXQP3_L (9e4) Clarabel's as-is certification took 1171 s, nearly all in
+`psd_check` (ending "unknown"). Below the cap the solver usually dominates (HiGHS used
+its whole 60 s on LISWET5), with one exception: on CVXQP1/2/3_M (about 9e3 nonzeros)
+every unit timed out at 120 s before its repairs, most likely in `psd_check` (inferred,
+not timed per unit). `psd_check` now also stops at 60 s (section 8): a CVXQP1_M
+Clarabel unit then took 100 s (certification 60 s, PSD "unknown"; repairs 40 s) and kept
+its as-is result and own-rule verdict. The smoke slices predate that. Projection from the
+first 41-unit smoke slice (mean 59 s per unit, timeouts counted at 120 s): about 7.6
+worker-hours for the 464 units, so about 1.9 h of wall time on 4 workers.
 
 Limits per unit (quick / full / mittelmann): solver 60 s / 600 s / 3600 s; repair budget
 30 s / 60 s / 300 s; hard kill 300 s / 1200 s / 7200 s. In the full profile the
@@ -371,7 +396,16 @@ sets.
 - Reproducing a solve needs the same BLAS thread count: SCS's bundled OpenBLAS reads
   `OMP_NUM_THREADS` when it loads, and with more threads its sums change order and SCS
   takes other steps (sched_50_50_orig: objective 26617.68 with one thread, 26613.57
-  without the variable). Workers and `study own-tests` set it to 1.
+  without the variable). Workers start with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`
+  and `MKL_NUM_THREADS` set to 1 in their initial environment, and `study own-tests`
+  re-solves in a process spawned the same way (its manifest records the values; the
+  medium smoke records of AUG3D with Clarabel and OSQP reproduce bit for bit through it;
+  until 2026-11-21 it set them in the CLI process, after numpy had loaded). Until
+  2026-11-21 a worker set only `OMP_NUM_THREADS`, inside its loop: a spawned process
+  imports certkkt and numpy before that runs, so numpy's BLAS in the workers was not
+  single-threaded (SCS, which loads later, was). Records before that date were produced
+  that way; their solver outputs were still reproduced bit for bit by `study own-tests`
+  (REPORT 2.1).
 - Exact decimals: the certified problem is the published one. A solver sees the doubles
   nearest to it, so a solution can be exactly feasible for the doubles and not for the
   decimals; the difference is below 1e-16 relative per coefficient and shows up only at
@@ -382,5 +416,11 @@ sets.
 - `psd_check` and exact elimination have operation budgets; "unknown" PSD status
   downgrades dual-based certificates rather than guessing. Of the 138 Maros-Meszaros
   problems, CVXQP1/2/3_L, STCQP1/2 and EXDATA end "unknown" within `psd_check`'s budget
-  and VALUES is not PSD.
+  and VALUES is not PSD. The budget counts words, not seconds, and does not bound wall
+  time: on 2026-11-21 (loaded machine) Clarabel's as-is certification of CVXQP3_L took
+  1171 s, nearly all in it, and units on CVXQP1/2/3_M timed out at 120 s before their
+  repairs, most likely in it. Since then it also returns "unknown" after
+  `sparse.PSD_SECONDS` = 60 s of wall time (measured 60.1 s on CVXQP1_M, 60.6 s on
+  CVXQP3_L). So whether a large matrix is decided can depend on the machine; "unknown"
+  only downgrades dual-based certificates, so no claim depends on it.
 - Infeasible or unbounded claims are not certified (no Farkas certificates in v0.1).

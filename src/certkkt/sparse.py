@@ -27,6 +27,10 @@ from certkkt.rational import ZERO, Q, to_q
 DEFAULT_BUDGET = 20_000_000
 #: Default budget of :func:`psd_check` in pivot-word updates (about a minute).
 PSD_BUDGET = 100_000_000
+#: Wall-clock limit of :func:`psd_check` in seconds. The word budget does not bound time:
+#: it counts the pivot's words, not those of the growing entries it updates (CVXQP3_L took
+#: 1171 s under it, 2026-11-21).
+PSD_SECONDS = 60.0
 
 
 class BudgetExceeded(RuntimeError):
@@ -548,7 +552,9 @@ class PSDResult:
         return self.status == "psd"
 
 
-def psd_check(mat: QMatrix, *, budget: int = PSD_BUDGET) -> PSDResult:
+def psd_check(
+    mat: QMatrix, *, budget: int = PSD_BUDGET, seconds: float | None = PSD_SECONDS
+) -> PSDResult:
     """Decide exactly whether a symmetric rational matrix is positive semidefinite.
 
     Symmetric Gaussian elimination: a matrix is PSD iff, after eliminating a positive
@@ -556,8 +562,12 @@ def psd_check(mat: QMatrix, *, budget: int = PSD_BUDGET) -> PSDResult:
     with a nonzero off-diagonal in its row, refutes it. Pivots are chosen by smallest
     degree. Returns status "unknown" if the budget runs out. An update counts one per
     64-bit word of its pivot, because exact coefficients grow with fill-in and a budget of
-    plain updates does not bound the time (CVXQP1_L ran past 20 minutes under it).
+    plain updates does not bound the time (CVXQP1_L ran past 20 minutes under it). It
+    also returns "unknown" after ``seconds`` of wall time (None: no limit), so on a slower
+    or busier machine a matrix may end "unknown" where a faster one decides it; "unknown"
+    only downgrades certificates, so this never makes a claim.
     """
+    deadline = None if seconds is None else time.perf_counter() + seconds
     n = mat.shape[0]
     if mat.shape[1] != n:
         raise ValueError("matrix is not square")
@@ -621,6 +631,8 @@ def psd_check(mat: QMatrix, *, budget: int = PSD_BUDGET) -> PSDResult:
             ops += (len(nbrs) - a) * words
             if ops > budget:
                 return PSDResult("unknown", f"elimination exceeded {budget} operations")
+            if deadline is not None and time.perf_counter() > deadline:
+                return PSDResult("unknown", f"elimination exceeded {seconds:g} s")
             heapq.heappush(heap, (len(rj), j))
         rows[pivot] = {}
     return PSDResult("psd", "exact symmetric elimination")
@@ -634,6 +646,7 @@ def q_list(values: Iterable[object]) -> list[Any]:
 __all__ = [
     "DEFAULT_BUDGET",
     "PSD_BUDGET",
+    "PSD_SECONDS",
     "BudgetExceeded",
     "check_deadline",
     "PSDResult",

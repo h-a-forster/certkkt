@@ -248,6 +248,25 @@ def mm_members(root: Path) -> Iterator[tuple[str, Path, str, int]]:
                     yield stem[:-4].upper(), path, info.filename, info.file_size
 
 
+def mm_nonzeros(root: Path, stop_above: int | None = None) -> dict[str, int]:
+    """``nnz(A) + nnz(P)`` per Maros-Meszaros problem, as published (P as the full
+    symmetric matrix), counted from the QPS text without building exact numbers. With
+    ``stop_above``, counting a problem stops once it exceeds that number (the value
+    returned is then only known to exceed it)."""
+    from certkkt.qps import qps_nonzeros
+
+    out = {}
+    archives: dict[Path, list[tuple[str, str]]] = {}
+    for name, arch, member, _ in mm_members(root):
+        archives.setdefault(arch, []).append((name, member))
+    for arch, members in archives.items():
+        with zipfile.ZipFile(arch) as zf:
+            for name, member in members:
+                text = zf.read(member).decode("latin-1")
+                out[name] = sum(qps_nonzeros(text, stop_above))
+    return out
+
+
 __all__ = [
     "CBLIB_DIMACS",
     "CBLIB_MITTELMANN",
@@ -259,6 +278,7 @@ __all__ = [
     "SOURCES",
     "fetch",
     "mm_members",
+    "mm_nonzeros",
     "remote_files",
     "sha256_file",
 ]

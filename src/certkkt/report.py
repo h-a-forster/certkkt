@@ -132,6 +132,17 @@ def markdown(records: list[dict[str, Any]], title: str = "certkkt study") -> str
             + " units."
         )
         lines.append("")
+    unrepaired = defaultdict(int)
+    for r in records:
+        if r.get("repair_budget") is not None and r["repair_budget"] <= 0:
+            unrepaired[r.get("suite")] += 1
+    if unrepaired:
+        lines.append(
+            "No repair attempted (unit time budget used up first): "
+            + ", ".join(f"{k} {v}" for k, v in sorted(unrepaired.items()))
+            + " units."
+        )
+        lines.append("")
 
     default = [r for r in records if r.get("tol") == "default"]
     if default:

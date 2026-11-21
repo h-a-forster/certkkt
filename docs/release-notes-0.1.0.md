@@ -47,7 +47,7 @@ workers; 243 units produced a solution.
 ## Full study: not run
 
 The full profile (3093 units) was started on 2026-10-30 with 3 workers and stopped by
-owner decision at 348 units after 6.4 h, all of them Maros-Meszaros; 28 were hard
+the maintainer at 348 units after 6.4 h, all of them Maros-Meszaros; 28 were hard
 timeouts at 1200 s on CVXQP1_L, CVXQP2_L and CVXQP3_L, and the run's own projection
 stood at about 50 more hours against an estimate of about 6. Its partial records are not
 reported. So there are no results for the Maros-Meszaros and CBLIB tolerance sweeps, the

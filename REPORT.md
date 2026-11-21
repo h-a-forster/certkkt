@@ -2,7 +2,7 @@
 
 Date: 2026-10-30; own stopping rules (section 2.1) and the Mittelmann check (section 5)
 added 2026-11-13. Profile: `quick` (DESIGN section 5.4). The full profile was started
-and stopped by owner decision at 348 of 3093 units; nothing here comes from it (see
+and stopped by the maintainer at 348 of 3093 units; nothing here comes from it (see
 AGENTS.md). Every number below comes from
 [docs/results/quick-units.jsonl](docs/results/quick-units.jsonl) (one record per unit)
 and, for the own stopping rules,
@@ -108,7 +108,7 @@ default tolerance; "certified at eps" means all three are at most eps.
    `|z|`, and HiGHS's active-set solver tests stationarity only through its search
    direction on its working set (`||p||_2 < 1e-11`, a step, not a residual), on a
    Hessian regularised by 1e-7, and tests no gap; its 1e-7 tolerances apply to bound and
-   dual-sign feasibility. The 2026-11-12 audit's count for OSQP holds: 35 of the
+   dual-sign feasibility. For OSQP, 35 of the
    37 OSQP units failing 1e-6 bind on the dual residual (19) or the gap (16). At 1e-6, the
    exact residuals exceed the threshold for 3/40 Clarabel, 16/39 HiGHS, 24/40 SCS and
    30/33 OSQP units claiming optimal; over all default units failing 1e-6 the binding
@@ -272,7 +272,11 @@ A separate one-day check (2026-11-13), not part of the quick profile's tables.
 ## 6. Limitations
 
 - Quick profile only: small Maros-Meszaros problems (40 of 138, the easy end), 4 of 18
-  CBLIB instances, 6 of 54 portfolio instances. Shares will move on the full sets.
+  CBLIB instances, 6 of 54 portfolio instances. Shares will move on the full sets. The
+  `medium` profile (section 7) extends Maros-Meszaros to the 116 problems up to 50 000
+  nonzeros but has only been smoke-tested, so findings 2 and 4 still rest on the 40
+  smallest files; the 22 largest problems, 14 CBLIB and 48 portfolio instances are not
+  covered by any runnable profile.
 - The counts describe this instance set exactly. The Wilson intervals are nominal: they
   would apply to a hypothetical exchangeable population of small Maros-Meszaros-like
   QPs, but the instances were selected by file size (the easy end) and families share
@@ -293,3 +297,43 @@ A separate one-day check (2026-11-13), not part of the quick profile's tables.
 - Infeasibility and unboundedness claims are not certified. One OSQP unit reported
   PRIMALC5 dual infeasible although it is a feasible, bounded problem; the point OSQP
   returned has exact `max_rel` 5e12.
+
+## 7. Medium profile
+
+Added 2026-11-21. **Not yet a result: the profile is defined and smoke-tested, not run.**
+The `medium` profile (DESIGN 5.4) covers every Maros-Meszaros problem with
+nnz(A) + nnz(P) <= 50 000, 116 of 138 (the quick profile's 40 have at most 2 582), x
+{Clarabel, OSQP, SCS, HiGHS} at defaults: 464 units, solver 60 s, 120 s per unit, repairs
+limited to what is left of the unit's time. Selecting by nonzeros rather than file size
+adds the problems the quick profile left out by size, not by difficulty. It was built on a
+machine shared with many other jobs, so only two smoke slices ran (the alphabetically
+first problems, AUG3D to DPKLO1), to test the runner, not to estimate anything; they give
+no shares and the section 2 table is not reproduced for them. Records:
+[docs/results/medium-smoke1-units.jsonl](docs/results/medium-smoke1-units.jsonl)
+(41 units on 12 problems, code at `3198950`, before the timeout fix below) and
+[docs/results/medium-smoke2-units.jsonl](docs/results/medium-smoke2-units.jsonl)
+(40 units on 10 problems, code at `b58cb2b`).
+
+- **Own stopping rule.** No unit claiming optimal failed its own rule in either slice
+  (0 of 30 and 0 of 24 such units; on 6 and 5 OSQP units its primal condition is
+  undetermined, as in section 2.1). Too few units to test finding 2.
+- **Float64 versus exact.** Float64 and exact evaluation of the as-is residuals agreed at
+  1e-4, 1e-6 and 1e-8 on every unit with both (32 and 26 units). Too few units to test
+  finding 4.
+- **As-is shares at 1e-6 and 1e-8 against quick.** Not estimated: the slices are the
+  first problems alphabetically and the machine was loaded, so they say nothing about
+  how the shares move.
+- **What the slices found instead.** 9 of 41 and 14 of 40 units hit the 120 s
+  limit, all before their repairs started (no unit reached the repairs and then timed
+  out): HiGHS on AUG3D and AUG3DC, and every unit on CVXQP1/2/3_M (all 12 in the second
+  slice). For CVXQP*_M the cause is inferred, not timed per unit: their solves are small,
+  and on CVXQP3_L the as-is certification took 1171 s, nearly all in `psd_check`
+  (DESIGN 8). A unit killed during its repairs used to lose its as-is result too; that
+  is fixed, but these units died before it existed. `psd_check` now stops at 60 s
+  (ending "unknown"); after that change a CVXQP1_M unit finished in 100 s with its
+  as-is result. The slices ran before it. Repair outcomes
+  (exact optima, `bounded`) in these slices are budget-bound and not reported.
+- **What the full run needs.**
+  `PROFILE=medium SUITES=mm WORKERS=<n> bash scripts/run_study.sh` on an idle machine
+  (projected from the first slice's 59 s mean unit time: about 7.6 worker-hours,
+  so about 1.9 h of wall time on 4 workers), `study own-tests --profile medium`, and the report.

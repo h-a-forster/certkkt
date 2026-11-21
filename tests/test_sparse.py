@@ -104,6 +104,10 @@ def test_psd_check():
             assert psd_check(M2).status == "not_psd"
     indef = QMatrix.from_rows((2, 2), [{0: Q(1), 1: Q(2)}, {0: Q(2), 1: Q(1)}])
     assert psd_check(indef).status == "not_psd"
+    # Not diagonally dominant, so it needs elimination; out of time it ends "unknown".
+    slow = QMatrix.from_rows((2, 2), [{0: Q(1), 1: Q(2)}, {0: Q(2), 1: Q(5)}])
+    assert psd_check(slow).status == "psd"
+    assert psd_check(slow, seconds=0.0).status == "unknown"
     with pytest.raises(ValueError):
         psd_check(QMatrix.from_rows((2, 2), [{1: Q(1)}, {}]))
 

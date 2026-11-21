@@ -24,8 +24,8 @@ how often default solver output (Clarabel, SCS, OSQP, ECOS, HiGHS) is certifiabl
 - Long computations: one fsynced JSON line per unit, resume by key, `progress.log`,
   hard per-unit timeout, retry wrapper. Run anything over ~8 minutes through the
   launcher pattern (see "How to run the study").
-- The GitHub repo is public; publish releases only with the owner's go-ahead. Open work
-  lives in `backlog.md` (gitignored, local only).
+- The GitHub repo is public; publish releases only with the maintainer's go-ahead. Open work
+  is tracked locally, outside the repository.
 
 ## Architecture map
 
@@ -55,6 +55,10 @@ uv run ruff check . && uv run ruff format --check .
 CERTKKT_RATIONAL=fraction uv run pytest tests/test_certify.py   # pure-Python backend
 ```
 
+With the Maros-Meszaros data fetched, `uv run pytest` also re-derives the medium
+profile's 116-problem list from the files (about 2 minutes on a busy machine); CI has
+no data and skips it.
+
 ## How to run the study
 
 ```sh
@@ -68,36 +72,48 @@ uv run certkkt study report --profile quick --units docs/results/quick-units.jso
 
 `study own-tests` re-solves recorded units to evaluate each solver's own stopping rule
 (DESIGN 3.5); it keeps a verdict only where the re-solve reproduces the record bit for bit,
-which needs single-threaded BLAS (it sets `OMP_NUM_THREADS=1`; DESIGN 8). New study runs
-record `own_test` per unit directly. `scripts/mittelmann_clarabel.py` runs Clarabel on the
-Mittelmann SOCP instances through the float-only CBF reader (REPORT section 5).
+which needs single-threaded BLAS (it re-solves in a spawned process that, like the
+study's workers, starts with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and
+`MKL_NUM_THREADS` at 1; DESIGN 8). New study runs record `own_test` per unit directly.
+`scripts/mittelmann_clarabel.py` runs Clarabel on the Mittelmann SOCP instances through
+the float-only CBF reader (REPORT section 5).
+
+The `medium` profile (DESIGN 5.4: the 116 Maros-Meszaros problems up to 50 000
+nonzeros, defaults, 120 s per unit) replaces the full profile for Maros-Meszaros; run it
+with `PROFILE=medium SUITES=mm WORKERS=<n> bash scripts/run_study.sh`, then `study
+own-tests --profile medium` and `study report --profile medium --own-tests
+runs/medium-own/own-tests.jsonl`. It has not been run in full yet.
 
 Do not launch the full profile as designed (see Status). `bash scripts/run_study.sh` is
 its launcher (fetch, three-attempt retry loop, log in `runs/longrun.log`, report in
-`runs/full/report.md`); environment variables `SUITES`, `WORKERS`, `RUN_DIR`, `MAX_UNITS`
-and `LOG` restrict or redirect it, which is the supported use until the redesign.
+`runs/full/report.md`); environment variables `PROFILE`, `SUITES`, `WORKERS`, `RUN_DIR`,
+`MAX_UNITS` and `LOG` restrict or redirect it, which is the supported use until the redesign.
 
 ## Status
 
-Status (2026-11-13): v0.1.0 plus own stopping rules. Library, CLI, plugin and adapters
-done and tested; quick study run, reported in REPORT.md and reproduced by a rerun
-(`docs/results/quick-rerun.md`); each solver's own stopping rule evaluated exactly on all
-216 Clarabel, HiGHS, OSQP and SCS quick units (`docs/results/quick-own-tests.jsonl`; no
-unit claiming optimal fails its own rule; OSQP's primal condition is undetermined on 29 of
-its 33, DESIGN 3.5). The full
-study was started and stopped by owner decision at 348/3093 units (all Maros-Meszaros; 28
-hard timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, its own
-projection then about 50 more hours (`runs/full/progress.log`); it is not reported.
+Status (2026-11-21): v0.1.0 plus own stopping rules and the `medium` profile. Library,
+CLI, plugin and adapters done and tested; quick study run, reported in REPORT.md and
+reproduced by a rerun (`docs/results/quick-rerun.md`); each solver's own stopping rule
+evaluated exactly on all 216 Clarabel, HiGHS, OSQP and SCS quick units
+(`docs/results/quick-own-tests.jsonl`; no unit claiming optimal fails its own rule;
+OSQP's primal condition is undetermined on 29 of its 33, DESIGN 3.5). The full study was
+started and stopped by the maintainer at 348/3093 units (all Maros-Meszaros; 28 hard
+timeouts at 1200 s, all on CVXQP1_L, CVXQP2_L and CVXQP3_L) after 6.4 h, its own
+projection then about 50 more hours; it is not reported. The `medium` profile that
+replaces it for Maros-Meszaros is defined and smoke-tested (REPORT section 7), not yet
+run in full.
 
 The 3093-unit full profile is not runnable as designed, and finishing it is not the plan:
-it needs a redesign (size cap and repair budget, see `backlog.md`), not a
-resume. Those timeouts came from `psd_check`, whose budget then counted plain updates
-while the exact coefficients grew. It now counts words and ends "unknown" in about a
-minute (DESIGN 3.3). That removes about half of the run's worker time (28 x 1200 s of
-about 19 worker-hours), so the 50-hour figure is stale, but no new figure has been
-measured and the rest of the case stands: the run had reached only 23 of the 138
-Maros-Meszaros problems, and the costs below remain. On the large instances the budgets
-would stop the units, so their results would measure the budget, not the solvers.
+it needs a redesign (size cap and repair budget), not a resume. Those timeouts came from
+`psd_check`, whose budget then counted plain updates while the exact coefficients grew.
+It now counts words and was meant to end "unknown" in about a minute (DESIGN 3.3), but
+on 2026-11-21 (a loaded machine) it took most of 1171 s on CVXQP3_L and most likely over
+120 s on CVXQP1/2/3_M, so it now also stops at 60 s of wall time (DESIGN 8). That would
+remove about half of the run's worker time (28 x 1200 s of about 19 worker-hours), so the
+50-hour figure is stale, but no new figure has been measured and the rest of the case
+stands: the run had reached only 23 of the 138 Maros-Meszaros problems, and the costs
+below remain. On the large instances the budgets would stop the units, so their results
+would measure the budget, not the solvers.
 `runs/full` predates the fix and any rerun should start from an empty run directory.
 
 Full-profile cost, from measured units: small Maros-Meszaros units about 6 s, 100 kB-1 MB

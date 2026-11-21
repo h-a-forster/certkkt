@@ -270,7 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("study", help="run, inspect or report the certification study")
     sp.add_argument("action", choices=("run", "status", "report", "own-tests"))
-    sp.add_argument("--profile", default="quick", choices=("quick", "full"))
+    sp.add_argument("--profile", default="quick", choices=("quick", "medium", "full"))
     sp.add_argument("--suite", action="append", choices=("mm", "cblib", "portfolio", "mittelmann"))
     sp.add_argument("--run-dir", help="default runs/<profile>")
     sp.add_argument("--data", default="data")

@@ -5,7 +5,7 @@ import pytest
 from certkkt import Q, certify, load_instance
 from certkkt.cbf import parse_cbf, read_cbf_float
 from certkkt.problem import boxed_duals_to_conic, conic_duals_to_boxed
-from certkkt.qps import FormatError, parse_qps
+from certkkt.qps import FormatError, parse_qps, qps_nonzeros
 
 QPS = """\
 * small QP exercising most sections
@@ -48,6 +48,14 @@ def test_qps_sections_are_read_exactly():
     assert bx.lb == [0, None, None] and bx.ub == [4, None, -1]  # negative UP frees x3
     assert bx.warnings
     assert bx.P.row_dicts() == [{0: 2, 1: Q(3, 10)}, {0: Q(3, 10), 1: 1}, {}]
+
+
+def test_qps_nonzeros_counts_what_the_parser_builds():
+    for text in (QPS, QPS.replace("x3        r2        -1.0", "x3        r2        0.0E+3")):
+        bx = parse_qps(text)
+        assert qps_nonzeros(text) == (bx.A.nnz, bx.P.nnz)
+    assert qps_nonzeros(QPS) == (6, 4)  # an explicit zero is dropped; P counts both triangles
+    assert sum(qps_nonzeros(QPS, stop_above=3)) > 3  # stops early, still above the cap
 
 
 def test_maximisation_is_negated():

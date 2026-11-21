@@ -73,6 +73,74 @@ def parse_qps(text: str, default_name: str = "problem", *, exact_decimals: bool 
             raise exc from None
 
 
+def qps_nonzeros(text: str, stop_above: int | None = None) -> tuple[int, int]:
+    """``(nnz(A), nnz(P))`` of MPS/QPS text as :func:`parse_qps` builds them (P as the full
+    symmetric matrix, explicit zeros dropped), in one pass that converts no number.
+
+    For selecting instances by size before loading them; it validates only what it needs
+    to count (section names, row and column names, entry layout). With ``stop_above`` it
+    returns as soon as the total exceeds that number, with partial counts whose sum does.
+    """
+    try:
+        return _count(text, stop_above, fixed=False)
+    except FormatError as exc:
+        try:
+            return _count(text, stop_above, fixed=True)
+        except FormatError:
+            raise exc from None
+
+
+def _nonzero(tok: str) -> bool:
+    """Whether a decimal token is nonzero: some nonzero digit in its mantissa."""
+    mantissa = tok.upper().replace("D", "E").split("E", 1)[0]
+    return any(ch in "123456789" for ch in mantissa)
+
+
+def _count(text: str, stop_above: int | None, *, fixed: bool) -> tuple[int, int]:
+    n_rows: set[str] = set()
+    rows: set[str] = set()
+    cols: set[str] = set()
+    nnz_a = nnz_p = 0
+    section: str | None = None
+    for lineno, line in enumerate(io.StringIO(text), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("*"):
+            continue
+        tokens = stripped.split()
+        if not line[0].isspace():
+            section = tokens[0].upper()
+            if section not in _SECTIONS:
+                raise FormatError(f"line {lineno}: unknown section {tokens[0]!r}")
+            if section == "ENDATA":
+                break
+            continue
+        if section not in ("ROWS", "COLUMNS", "QUADOBJ", "QSECTION", "QMATRIX"):
+            continue
+        if fixed:
+            tokens = [f for f in (line[sl].strip() for sl in _FIXED_FIELDS) if f]
+        if section == "ROWS":
+            if len(tokens) != 2:
+                raise FormatError(f"line {lineno}: expected 'type name' in ROWS")
+            (n_rows if tokens[0].upper() == "N" else rows).add(tokens[1])
+        elif section == "COLUMNS":
+            if len(tokens) not in (3, 5):
+                raise FormatError(f"line {lineno}: expected 'col row value [row value]'")
+            cols.add(tokens[0])
+            for k in range(1, len(tokens), 2):
+                if tokens[k] in rows:
+                    nnz_a += _nonzero(tokens[k + 1])
+                elif tokens[k] not in n_rows:
+                    raise FormatError(f"line {lineno}: unknown row {tokens[k]!r}")
+        else:
+            if len(tokens) != 3 or tokens[0] not in cols or tokens[1] not in cols:
+                raise FormatError(f"line {lineno}: expected 'col col value' in {section}")
+            if _nonzero(tokens[2]):
+                nnz_p += 1 if section == "QMATRIX" or tokens[0] == tokens[1] else 2
+        if stop_above is not None and nnz_a + nnz_p > stop_above:
+            break
+    return nnz_a, nnz_p
+
+
 #: Fixed-format MPS data fields (0-based slices of columns 2-3, 5-12, 15-22, 25-36, 40-47,
 #: 50-61).
 _FIXED_FIELDS = (
@@ -357,4 +425,4 @@ def _quadratic(quad: dict[tuple[int, int], Any], kind: str | None, n: int) -> QM
     return QMatrix.from_rows((n, n), rows)
 
 
-__all__ = ["FormatError", "Q", "parse_qps", "read_qps"]
+__all__ = ["FormatError", "Q", "parse_qps", "qps_nonzeros", "read_qps"]

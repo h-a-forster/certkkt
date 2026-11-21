@@ -1,8 +1,10 @@
 import dataclasses
 import json
 import math
+import os
 import random
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -90,6 +92,10 @@ def test_report_compares_exactly_and_counts_comparable_units():
     ]
     assert "as returned (as-is), over units with a solution: residuals 1." in markdown(leveled)
     assert "after repair, s: optimal 1." in markdown(leveled)
+    unrepaired = {**full, "outcome": "certified_as_is", "repair_budget": -1.0}
+    assert "No repair attempted (unit time budget used up first): s 1 units." in markdown(
+        [unrepaired, full]
+    )
 
 
 @pytest.fixture
@@ -143,7 +149,9 @@ def test_study_checkpoints_and_resumes(tmp_path, data_root):
 
 
 @pytest.mark.slow
-def test_own_tests_rerun_reproduces_and_merges_into_the_report(tmp_path, data_root):
+def test_own_tests_rerun_reproduces_and_merges_into_the_report(tmp_path, data_root, monkeypatch):
+    for var in study.BLAS_THREAD_VARS:
+        monkeypatch.delenv(var, raising=False)
     run = tmp_path / "run"
     study.run_study(
         "quick",
@@ -164,6 +172,10 @@ def test_own_tests_rerun_reproduces_and_merges_into_the_report(tmp_path, data_ro
     )
     own = study.read_records(tmp_path / "own" / "own-tests.jsonl")
     assert all(o["reproduced"] for o in own)
+    # The re-solves ran with the workers' BLAS environment, set in their own process.
+    blas = json.loads((tmp_path / "own" / "manifest.json").read_text())["blas_threads"]
+    assert blas == dict.fromkeys(study.BLAS_THREAD_VARS, "1")
+    assert not any(v in os.environ for v in study.BLAS_THREAD_VARS)
     merged = study.merge_own_tests(stripped, own)
     assert [m["own_test"] for m in merged] == [r["own_test"] for r in units]
     # A re-solve that did not reproduce the recorded run gives no own-rule verdict.
@@ -190,6 +202,96 @@ def test_study_records_timeouts_and_replaces_the_worker(tmp_path, data_root, mon
     )
     recs = study.read_records(run / "units.jsonl")
     assert [r["outcome"] for r in recs] == ["timeout", "timeout"]
+
+
+def _report_start_env(conn, data_root):
+    """Spawned probe: the BLAS variables as this process saw them when it started."""
+    import os
+    import sys
+
+    conn.send(({v: os.environ.get(v) for v in study.BLAS_THREAD_VARS}, "numpy" in sys.modules))
+
+
+@pytest.mark.slow
+def test_workers_start_with_single_threaded_blas(tmp_path, monkeypatch):
+    for var in study.BLAS_THREAD_VARS:
+        monkeypatch.delenv(var, raising=False)
+    proc, conn = study._spawn(tmp_path, target=_report_start_env)
+    env, numpy_loaded = conn.recv()
+    proc.join()
+    # numpy (and its BLAS) is already loaded when the target runs, so the variables must
+    # come from the environment the process started with; the parent's is left unchanged.
+    assert numpy_loaded
+    assert env == dict.fromkeys(study.BLAS_THREAD_VARS, "1")
+    assert not any(v in os.environ for v in study.BLAS_THREAD_VARS)
+
+
+def _checkpoint_then_hang(conn, data_root):
+    """Spawned fake worker: sends its first unit's pre-repair record, then hangs (the
+    15 s deadline leaves room for a slow start on a loaded machine)."""
+    import time
+
+    _, _, unit_dicts, _ = conn.recv()
+    ud = unit_dicts[0]
+    conn.send({"key": study.Unit(**ud).key, **ud, "as_is": {"max_rel": 1e-9}, "partial": True})
+    time.sleep(600)
+
+
+@pytest.mark.slow
+def test_a_unit_killed_in_its_repairs_keeps_its_as_is_record(tmp_path, data_root, monkeypatch):
+    quick = study.PROFILES["quick"]
+    short = dataclasses.replace(
+        quick, limits={**quick.limits, "portfolio": study.Limits(60.0, 30.0, 15.0)}
+    )
+    monkeypatch.setitem(study.PROFILES, "quick", short)
+    spawn = study._spawn
+    monkeypatch.setattr(study, "_spawn", lambda root: spawn(root, target=_checkpoint_then_hang))
+    run = tmp_path / "run"
+    study.run_study(
+        "quick", ("portfolio",), run_dir=run, data_root=data_root, workers=1, max_units=1,
+        echo=lambda s: None,
+    )  # fmt: skip
+    (rec,) = study.read_records(run / "units.jsonl")
+    assert rec["outcome"] == "timeout" and rec["error"] == "exceeded 15s during the repairs"
+    assert rec["as_is"] == {"max_rel": 1e-9} and "partial" not in rec
+
+
+def test_medium_profile_is_maros_meszaros_at_defaults_only(tmp_path):
+    units = study.plan(study.PROFILES["medium"], ("mm", "cblib", "portfolio"), tmp_path)
+    assert len(units) == 4 * len(study.MEDIUM_MM) == 464
+    assert {(u.suite, u.tol) for u in units} == {("mm", "default")}
+    lim = study.PROFILES["medium"].limits_for("mm")
+    assert lim.hard_seconds <= 120 and lim.unit_seconds < lim.hard_seconds
+
+
+@pytest.mark.slow
+def test_medium_selection_is_every_problem_up_to_the_cap():
+    from certkkt.datasets import mm_nonzeros
+
+    root = Path("data")
+    if not (root / "raw" / "mm" / "QPDATA3.ZIP").exists():
+        pytest.skip("Maros-Meszaros data not fetched (certkkt fetch mm)")
+    nnz = mm_nonzeros(root, stop_above=study.MEDIUM_MAX_NNZ)  # about 2 minutes
+    assert len(nnz) == 138
+    assert sorted(k for k, v in nnz.items() if v <= study.MEDIUM_MAX_NNZ) == sorted(study.MEDIUM_MM)
+
+
+@pytest.mark.solver
+def test_repairs_get_only_what_is_left_of_the_unit_budget():
+    from certkkt.instance import Instance
+    from certkkt.qps import parse_qps
+
+    text = (
+        "NAME T\nROWS\n N obj\n G r1\nCOLUMNS\n x1 obj 1 r1 1\n x2 obj 1 r1 1\n"
+        "RHS\n rhs r1 1\nQUADOBJ\n x1 x1 1\n x2 x2 1\nENDATA\n"
+    )
+    inst = Instance.from_boxed(parse_qps(text))
+    unit = study.Unit("mm", "T", "clarabel", "default")
+    spent = study.run_unit(unit, inst, study.Limits(unit_seconds=5.0), {"load": 6.0})
+    assert spent["outcome"] == "certified_as_is" and "best" not in spent
+    assert spent["repair_budget"] < 0 and "as_is" in spent and "own_test" in spent
+    ok = study.run_unit(unit, inst, study.Limits(unit_seconds=60.0), {"load": 0.0})
+    assert ok["outcome"] == "certified" and 0 < ok["repair_budget"] <= 30
 
 
 def test_sink_records_non_finite_values_as_null(tmp_path):
